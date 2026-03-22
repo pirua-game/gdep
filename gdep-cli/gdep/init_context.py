@@ -339,7 +339,7 @@ def _build_tool_reference(src_path: str, kind: ProjectKind) -> list[str]:
 def build_context_output(project_path: str) -> str:
     """
     get_project_context MCP 도구 및 `gdep context` CLI에서 호출.
-    .gdep/AGENTS.md가 있으면 그걸 읽고, 없으면 즉석 생성.
+    .gdep/AGENTS.md가 있으면 그걸 읽고, 없으면 자동 생성 후 반환.
     """
     profile = detect(project_path)
     agents_md = Path(profile.root) / ".gdep" / "AGENTS.md"
@@ -347,7 +347,13 @@ def build_context_output(project_path: str) -> str:
     if agents_md.exists():
         return agents_md.read_text(encoding="utf-8")
 
-    return _build_agents_md(project_path)
+    # AGENTS.md 없으면 자동 생성 (저장 포함)
+    try:
+        agents_md = write_agents_md(project_path, force=False)
+        return agents_md.read_text(encoding="utf-8")
+    except Exception:
+        # 저장 실패 시(권한 없는 경로 등) 즉석 생성만
+        return _build_agents_md(project_path)
 
 
 def write_agents_md(project_path: str, force: bool = False) -> Path:
