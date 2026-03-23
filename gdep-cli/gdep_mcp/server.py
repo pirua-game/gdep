@@ -30,10 +30,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-# ── 경로 설정 ──────────────────────────────────────────────────
-# gdep-mcp/server.py → gdep-cli/ 가 sys.path에 있어야 gdep 패키지를 import할 수 있음
-_HERE      = Path(__file__).parent          # gdep-cli/gdep-mcp/
-_GDEP_ROOT = _HERE.parent                   # gdep-cli/
+_HERE      = Path(__file__).parent
+_GDEP_ROOT = _HERE.parent
 if str(_GDEP_ROOT) not in sys.path:
     sys.path.insert(0, str(_GDEP_ROOT))
 
@@ -42,8 +40,11 @@ from gdep_mcp.tools.analyze_impact_and_risk import run as _impact_run
 from gdep_mcp.tools.explore_class_semantics import run as _semantics_run
 from gdep_mcp.tools.inspect_architectural_health import run as _health_run
 from gdep_mcp.tools.trace_gameplay_flow import run as _flow_run
+from gdep_mcp.tools.suggest_test_scope import run as _test_scope_run
+from gdep_mcp.tools.suggest_lint_fixes import run as _lint_fixes_run
+from gdep_mcp.tools.summarize_project_diff import run as _diff_summary_run
+from gdep_mcp.tools.analyze_axmol_events import run as _axmol_events_run
 
-# ── 추가 분석 모듈 (3~7단계 기능) — 로드 실패해도 서버는 기동됨 ──
 try:
     from gdep.unity_event_refs import build_event_map, format_event_result
     _UNITY_EVENTS_AVAILABLE = True
@@ -75,27 +76,17 @@ except ImportError:
     _UE5_ANIMATOR_AVAILABLE = False
 
 try:
-    from gdep.ue5_blueprint_mapping import (
-        build_bp_map,
-        format_full_project_map,
-        format_mapping,
-    )
+    from gdep.ue5_blueprint_mapping import build_bp_map, format_full_project_map, format_mapping
     _UE5_BP_MAPPING_AVAILABLE = True
 except ImportError:
     _UE5_BP_MAPPING_AVAILABLE = False
 
-# ── MCP 서버 초기화 ────────────────────────────────────────────
 mcp = FastMCP("gdep")
 
 
-# ════════════════════════════════════════════════════════════════
-# CONTEXT TOOL — 항상 먼저 호출 권장
-# ════════════════════════════════════════════════════════════════
-
 @mcp.tool()
 def get_project_context(project_path: str) -> str:
-    """
-    Get a complete AI-ready overview of the game project. CALL THIS FIRST.
+    """Get a complete AI-ready overview of the game project. CALL THIS FIRST.
 
     Returns project type, source path, class count, high-coupling classes,
     GAS summary (UE5), Animator controllers (Unity), and a decision guide
@@ -103,9 +94,6 @@ def get_project_context(project_path: str) -> str:
 
     If .gdep/AGENTS.md exists in the project root (created by 'gdep init'),
     returns its content. Otherwise generates context on the fly.
-
-    Use this tool at the start of any coding session on a game project to
-    understand the codebase structure before diving into specific tasks.
 
     Args:
         project_path: Any path within the game project (root, Source, or Assets).
@@ -116,21 +104,15 @@ def get_project_context(project_path: str) -> str:
     except Exception as e:
         return f"[get_project_context] Error: {e}"
 
+
 @mcp.tool()
 def analyze_impact_and_risk(project_path: str, class_name: str) -> str:
-    """
-    Analyze the blast radius and risks before modifying a class.
+    """Analyze the blast radius and risks before modifying a class.
 
     USE THIS TOOL WHEN:
     - User says "I want to refactor / modify / rename / delete class X"
     - User asks "what will break if I change X?"
-    - User asks "is it safe to modify X?"
     - Before any non-trivial code change to understand side effects
-
-    Returns:
-    - Reverse dependency tree: all classes that directly or indirectly use X
-    - Unity prefab / UE5 blueprint assets that reference X
-    - Lint issues already present in or around X (anti-patterns to fix)
 
     Args:
         project_path: Absolute path to Scripts (Unity) or Source (UE5) folder.
@@ -142,24 +124,16 @@ def analyze_impact_and_risk(project_path: str, class_name: str) -> str:
 @mcp.tool()
 def trace_gameplay_flow(project_path: str, class_name: str, method_name: str,
                         depth: int = 4, include_source: bool = True) -> str:
-    """
-    Trace a method's full call chain and show relevant source code.
+    """Trace a method's full call chain and show relevant source code.
 
     USE THIS TOOL WHEN:
-    - User asks "how does feature X work?"
-    - User asks "trace the flow of method Y"
+    - User asks "how does feature X work?" or "trace the flow of method Y"
     - User is debugging and wants to see the execution path
-    - User asks "what happens when Z is called?"
-    - User wants to understand async chains, locks, or event dispatches
-
-    Returns:
-    - Call tree from CLASS.METHOD with async/lock/dispatch annotations
-    - Source code of the entry-point class for immediate reference
 
     Args:
         project_path:   Absolute path to Scripts/Source folder.
         class_name:     Entry-point class. E.g. "ManagerBattle", "AHSCharacterBase"
-        method_name:    Entry-point method. E.g. "PlayHand", "BeginPlay", "ActivateAbility"
+        method_name:    Entry-point method. E.g. "PlayHand", "ActivateAbility"
         depth:          Tracing depth (default 4, max recommended 6).
         include_source: Append source code of entry class (default True).
     """
@@ -169,17 +143,11 @@ def trace_gameplay_flow(project_path: str, class_name: str, method_name: str,
 @mcp.tool()
 def inspect_architectural_health(project_path: str, include_dead_code: bool = True,
                                   include_refs: bool = True, top: int = 15) -> str:
-    """
-    Full architectural health check: coupling, cycles, dead code, and anti-patterns.
+    """Full architectural health check: coupling, cycles, dead code, and anti-patterns.
 
     USE THIS TOOL WHEN:
-    - User asks "is the codebase in good shape?"
-    - User asks "what's the technical debt here?"
-    - User asks "are there circular dependencies?"
-    - User asks "what code is dead / unused?"
-    - At the start of a refactoring session for an overview
-
-    Note: May take 10-60 seconds on large projects (>500 files).
+    - User asks "is the codebase in good shape?" or "what's the technical debt?"
+    - User asks "are there circular dependencies?" or "what code is dead?"
 
     Args:
         project_path:      Absolute path to Scripts/Source folder.
@@ -193,20 +161,11 @@ def inspect_architectural_health(project_path: str, include_dead_code: bool = Tr
 @mcp.tool()
 def explore_class_semantics(project_path: str, class_name: str,
                              summarize: bool = True, refresh: bool = False) -> str:
-    """
-    Get the full structure of a class with an optional AI-generated role summary.
+    """Get the full structure of a class with an optional AI-generated role summary.
 
     USE THIS TOOL WHEN:
-    - User asks "what does class X do?"
-    - User asks "show me the structure of X"
-    - User is unfamiliar with a class and needs context before editing it
-    - User asks "what methods / fields does X have?"
+    - User asks "what does class X do?" or "show me the structure of X"
     - Before writing code that interacts with X
-
-    Returns:
-    - Fields, methods, in/out dependencies
-    - Unity prefab / UE5 blueprint usages (engine asset back-references)
-    - 3-line AI summary of the class role (cached in .gdep_cache/summaries/)
 
     Args:
         project_path: Absolute path to Scripts/Source folder.
@@ -217,118 +176,133 @@ def explore_class_semantics(project_path: str, class_name: str,
     return _semantics_run(project_path, class_name, summarize, refresh)
 
 
-# ════════════════════════════════════════════════════════════════
-# RAW CLI ACCESS TOOL
-# ════════════════════════════════════════════════════════════════
-
 @mcp.tool()
 def execute_gdep_cli(args: list[str]) -> str:
-    """
-    Execute any gdep CLI command directly. Use this to access features not covered
-    by the high-level tools above.
-
-    You MUST provide exact CLI arguments as a list of strings.
+    """Execute any gdep CLI command directly.
 
     Common examples:
-      Detect project type:    ["detect", "D:/MyGame/Assets/Scripts"]
-      Scan with dead code:    ["scan", "D:/MyGame/Assets/Scripts", "--dead-code", "--circular"]
-      Describe a class:       ["describe", "D:/MyGame/Assets/Scripts", "BattleManager"]
-      Flow trace (console):   ["flow", "D:/MyGame/Assets/Scripts", "--class", "BattleManager", "--method", "StartBattle"]
-      Impact analysis:        ["impact", "D:/MyGame/Assets/Scripts", "BattleManager", "--depth", "5"]
-      Lint check:             ["lint", "D:/MyGame/Assets/Scripts"]
-      Graph export:           ["graph", "D:/MyGame/Assets/Scripts", "--format", "mermaid"]
-      Diff vs HEAD~1:         ["diff", "D:/MyGame/Assets/Scripts", "--commit", "HEAD~1"]
-      Generate hints:         ["hints", "generate", "D:/MyGame/Assets/Scripts"]
-      Show LLM config:        ["config", "llm"]
+      ["detect", "D:/MyGame/Assets/Scripts"]
+      ["scan", "D:/MyGame/Assets/Scripts", "--dead-code", "--circular"]
+      ["describe", "D:/MyGame/Assets/Scripts", "BattleManager"]
+      ["flow", "D:/MyGame/Assets/Scripts", "--class", "BattleManager", "--method", "StartBattle"]
+      ["impact", "D:/MyGame/Assets/Scripts", "BattleManager", "--depth", "5"]
+      ["lint", "D:/MyGame/Assets/Scripts"]
+      ["diff", "D:/MyGame/Assets/Scripts", "--commit", "HEAD~1"]
 
     Args:
-        args: CLI argument list (exclude 'gdep' itself).
-              E.g. ["scan", "D:\\Project", "--dead-code"] runs: gdep scan D:\\Project --dead-code
+        args: CLI argument list (exclude 'gdep'). E.g. ["scan", "D:\\Project", "--dead-code"]
     """
     try:
-        command = [sys.executable, "-m", "gdep.cli"] + args
-
-        env = os.environ.copy()
-        env["PYTHONIOENCODING"] = "utf-8"
-
         result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
+            [sys.executable, "-m", "gdep.cli"] + args,
+            capture_output=True, text=True, encoding="utf-8",
             stdin=subprocess.DEVNULL,
-            env=env,
-            timeout=180,
-            cwd=str(_GDEP_ROOT),
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+            timeout=180, cwd=str(_GDEP_ROOT),
         )
-
         if result.returncode == 0:
             return result.stdout or "(No output)"
-        return (
-            f"CLI Error (exit {result.returncode}):\n"
-            f"{result.stderr}\n"
-            f"{result.stdout}"
-        )
-
+        return f"CLI Error (exit {result.returncode}):\n{result.stderr}\n{result.stdout}"
     except subprocess.TimeoutExpired:
         return "Error: Command timed out after 180 seconds."
     except Exception as e:
         return f"Failed to execute CLI command: {e}"
 
 
-# ════════════════════════════════════════════════════════════════
-# UNITY-SPECIFIC TOOLS (3단계 기능)
-# ════════════════════════════════════════════════════════════════
+@mcp.tool()
+def suggest_test_scope(project_path: str, class_name: str, depth: int = 3) -> str:
+    """Suggest which test files need to run when a specific class is modified.
+
+    USE THIS TOOL WHEN:
+    - User asks "what tests do I need to run after changing class X?"
+    - PR review: determine the minimal test set for a change
+    - CI automation: generate a targeted test-file list
+
+    Args:
+        project_path: Absolute path to Scripts (Unity) or Source (UE5) folder.
+        class_name:   Class to analyze. E.g. "BattleManager", "APlayerCharacter"
+        depth:        Reverse-dependency tracing depth (default 3).
+    """
+    return _test_scope_run(project_path, class_name, depth)
+
 
 @mcp.tool()
-def find_unity_event_bindings(project_path: str,
-                               method_name: str | None = None) -> str:
+def suggest_lint_fixes(project_path: str, rule_ids: list[str] | None = None) -> str:
+    """Run linter and return actionable code fix suggestions for detected anti-patterns.
+
+    USE THIS TOOL WHEN:
+    - User asks "how do I fix these lint warnings?"
+    - Pre-PR cleanup: user wants concrete steps, not just a list
+
+    Args:
+        project_path: Absolute path to project root or Scripts/Source directory.
+        rule_ids: Optional list of rule IDs to filter (e.g. ['UNI-PERF-001']).
     """
-    Find Unity Event (UnityEvent / Button.onClick) bindings in prefabs, scenes, and assets.
+    return _lint_fixes_run(project_path, rule_ids=rule_ids)
 
-    Scans .prefab, .unity, and .asset files for persistent call bindings
-    (m_PersistentCalls) and returns which methods are wired to which events.
 
-    This reveals methods that are called from the Inspector (not visible in code search).
+@mcp.tool()
+def summarize_project_diff(project_path: str, commit_ref: str | None = None) -> str:
+    """Analyze git diff and summarize the architectural impact of changes.
+
+    USE THIS TOOL WHEN:
+    - User asks "what does this PR do to the codebase architecture?"
+    - User asks "does this change introduce new circular dependencies?"
+
+    Args:
+        project_path: Absolute path to project root or Scripts/Source directory.
+        commit_ref:   Git ref to diff against (e.g. "HEAD~1", "main"). Defaults to "HEAD~1".
+    """
+    return _diff_summary_run(project_path, commit_ref=commit_ref)
+
+
+@mcp.tool()
+def analyze_axmol_events(project_path: str, class_name: str | None = None) -> str:
+    """Scan an Axmol project for EventDispatcher and scheduler callback bindings.
+
+    USE THIS TOOL WHEN:
+    - User asks "which callbacks does this Axmol class register?"
+    - Debugging event listener leaks or unexpected callback invocations
+
+    Detects addEventListenerWithSceneGraphPriority, CC_CALLBACK_* macros,
+    schedule/scheduleOnce with CC_SCHEDULE_SELECTOR, scheduleUpdate().
+
+    Args:
+        project_path: Absolute path to Axmol project root or Classes/ directory.
+        class_name:   Optional class name to filter results.
+    """
+    return _axmol_events_run(project_path, class_name)
+
+
+@mcp.tool()
+def find_unity_event_bindings(project_path: str, method_name: str | None = None) -> str:
+    """Find Unity Event bindings in prefabs, scenes, and assets.
+
+    Reveals methods called from the Inspector (not visible in code search).
 
     Args:
         project_path: Absolute path to Unity Assets or Scripts folder.
-        method_name:  Optional filter — only return bindings for this method name.
-                      If None, returns all event bindings found.
+        method_name:  Optional filter. If None, returns all event bindings.
     """
     if not _UNITY_EVENTS_AVAILABLE:
-        return (
-            "unity_event_refs module not available yet. "
-            "Use execute_gdep_cli(['scan', project_path]) as a fallback."
-        )
+        return "unity_event_refs module not available."
     try:
         from gdep.unity_event_refs import build_event_map, format_event_result
-        event_map = build_event_map(project_path)
-        return format_event_result(event_map, method_name)
+        return format_event_result(build_event_map(project_path), method_name)
     except Exception as e:
         return f"[find_unity_event_bindings] Error: {e}"
 
 
 @mcp.tool()
-def analyze_unity_animator(project_path: str,
-                            controller_name: str | None = None) -> str:
-    """
-    Analyze Unity Animator Controller structure: layers, states, transitions, blend trees.
-
-    Parses .controller files (Unity YAML) and returns a structured view of
-    the animation state machine — layers, states, any-state transitions, blend trees,
-    and which animation clips each state uses.
+def analyze_unity_animator(project_path: str, controller_name: str | None = None) -> str:
+    """Analyze Unity Animator Controller: layers, states, transitions, blend trees.
 
     Args:
         project_path:     Absolute path to Unity Assets or project root.
-        controller_name:  Optional — analyze only the named .controller file.
-                          If None, analyzes all .controller files found.
+        controller_name:  Optional .controller filename. If None, analyzes all.
     """
     if not _UNITY_ANIMATOR_AVAILABLE:
-        return (
-            "unity_animator module not available yet. "
-            "Use execute_gdep_cli(['detect', project_path]) as a fallback."
-        )
+        return "unity_animator module not available."
     try:
         from gdep.unity_animator import analyze_animator
         return analyze_animator(project_path, controller_name)
@@ -336,34 +310,18 @@ def analyze_unity_animator(project_path: str,
         return f"[analyze_unity_animator] Error: {e}"
 
 
-# ════════════════════════════════════════════════════════════════
-# UE5-SPECIFIC TOOLS (5~7단계 기능)
-# ════════════════════════════════════════════════════════════════
-
 @mcp.tool()
-def analyze_ue5_gas(project_path: str,
-                    class_name: str | None = None) -> str:
-    """
-    Analyze Gameplay Ability System (GAS) usage in a UE5 project.
+def analyze_ue5_gas(project_path: str, class_name: str | None = None) -> str:
+    """Analyze Gameplay Ability System (GAS) usage in a UE5 project.
 
-    Scans C++ source and .uasset binaries to extract:
-    - GameplayTags used (FGameplayTag, FGameplayTagContainer)
-    - GameplayAbilities and their activation conditions
-    - GameplayEffects and their targets
-    - AttributeSets and their attributes
-    - AbilitySystemComponent usage
-    - ABP (AnimBlueprint) relationships to abilities
+    Extracts GameplayTags, Abilities, Effects, AttributeSets, ASC usage.
 
     Args:
         project_path: Absolute path to UE5 Source or project root.
-        class_name:   Optional — filter results to a specific class.
-                      If None, scans the entire project.
+        class_name:   Optional filter. If None, scans the entire project.
     """
     if not _UE5_GAS_AVAILABLE:
-        return (
-            "ue5_gas_analyzer module not available yet. "
-            "Use execute_gdep_cli(['scan', project_path, '--deep']) as a fallback."
-        )
+        return "ue5_gas_analyzer module not available."
     try:
         from gdep.ue5_gas_analyzer import analyze_gas
         return analyze_gas(project_path, class_name)
@@ -372,27 +330,15 @@ def analyze_ue5_gas(project_path: str,
 
 
 @mcp.tool()
-def analyze_ue5_behavior_tree(project_path: str,
-                               asset_name: str | None = None) -> str:
-    """
-    Extract and describe UE5 Behavior Tree structure from .uasset files.
-
-    Parses BehaviorTree assets to reveal:
-    - Root → Composite → Task/Decorator/Service hierarchy
-    - Referenced C++ Task/Decorator/Service class names
-    - Blackboard asset and its keys
-    - Connection between BT assets and the AI Controllers that use them
+def analyze_ue5_behavior_tree(project_path: str, asset_name: str | None = None) -> str:
+    """Extract UE5 Behavior Tree structure from .uasset files.
 
     Args:
         project_path: Absolute path to UE5 Content or project root.
-        asset_name:   Optional .uasset filename (without extension) to analyze.
-                      If None, scans all BehaviorTree assets found.
+        asset_name:   Optional asset name. If None, scans all BehaviorTree assets.
     """
     if not _UE5_AI_AVAILABLE:
-        return (
-            "ue5_ai_analyzer module not available yet. "
-            "Use execute_gdep_cli(['describe', project_path, 'MyAIController']) as a fallback."
-        )
+        return "ue5_ai_analyzer module not available."
     try:
         from gdep.ue5_ai_analyzer import analyze_behavior_tree
         return analyze_behavior_tree(project_path, asset_name)
@@ -401,23 +347,15 @@ def analyze_ue5_behavior_tree(project_path: str,
 
 
 @mcp.tool()
-def analyze_ue5_state_tree(project_path: str,
-                            asset_name: str | None = None) -> str:
-    """
-    Extract and describe UE5 StateTree structure from .uasset files.
-
-    Parses StateTree assets (UE 5.2+) to reveal:
-    - State hierarchy and transitions
-    - Task/Evaluator/Condition C++ class references
-    - Enter/Exit conditions per state
-    - Linked schema and context data
+def analyze_ue5_state_tree(project_path: str, asset_name: str | None = None) -> str:
+    """Extract UE5 StateTree structure from .uasset files.
 
     Args:
         project_path: Absolute path to UE5 Content or project root.
-        asset_name:   Optional asset filename to analyze. If None, scans all StateTree assets.
+        asset_name:   Optional asset name. If None, scans all StateTree assets.
     """
     if not _UE5_AI_AVAILABLE:
-        return "ue5_ai_analyzer module not available yet."
+        return "ue5_ai_analyzer module not available."
     try:
         from gdep.ue5_ai_analyzer import analyze_state_tree
         return analyze_state_tree(project_path, asset_name)
@@ -426,29 +364,13 @@ def analyze_ue5_state_tree(project_path: str,
 
 
 @mcp.tool()
-def analyze_ue5_animation(project_path: str,
-                           asset_name: str | None = None,
-                           asset_type: str = "all",
-                           detail_level: str = "summary") -> str:
-    """
-    Analyze UE5 animation assets: AnimBlueprint (ABP) and Animation Montages.
+def analyze_ue5_animation(project_path: str, asset_name: str | None = None,
+                           asset_type: str = "all", detail_level: str = "summary") -> str:
+    """Analyze UE5 animation assets: AnimBlueprint (ABP) and Animation Montages.
 
     USE THIS TOOL WHEN:
     - User asks "what animation states does this character have?"
     - User asks "which montages are used for abilities?"
-    - User asks "what GAS notifies are in the animation?"
-    - User needs to understand the animation graph structure
-
-    detail_level controls output verbosity:
-    - "summary" (default): Only gameplay-relevant info — State names, Slot names,
-                           GAS-related notifies, referenced anim assets.
-                           Best for understanding the animation system.
-    - "full": Everything above + all AnimNotify classes, all asset references.
-              Best for detailed debugging or documentation.
-
-    Extracts:
-    - ABP: state machine states (Idle/Jump/Attack etc.), slots, GAS ability notifies
-    - Montage: section names, slot names, GAS notify events, AnimSequence references
 
     Args:
         project_path: Absolute path to UE5 Content or project root.
@@ -457,81 +379,31 @@ def analyze_ue5_animation(project_path: str,
         detail_level: "summary" (default) or "full".
     """
     if not _UE5_ANIMATOR_AVAILABLE:
-        return "ue5_animator module not available yet."
+        return "ue5_animator module not available."
     try:
         from gdep.ue5_animator import analyze_abp, analyze_montage
-
-        def _trim_for_summary(text: str) -> str:
-            """summary 모드: 노이즈 섹션 제거."""
-            keep_sections = {
-                "# AnimBlueprint", "# Animation Montage",
-                "## ", "### States", "### Animation Slots",
-                "### GAS-related", "### Sections", "### Slots",
-                "### Referenced Anim",
-            }
-            out = []
-            skip = False
-            for line in text.splitlines():
-                # 섹션 헤더
-                if line.startswith("###"):
-                    skip = not any(k in line for k in [
-                        "States", "Animation Slots", "GAS-related",
-                        "Sections", "Slots", "Referenced Anim"
-                    ])
-                if not skip:
-                    out.append(line)
-            return "\n".join(out)
-
         if asset_type == "abp":
             result = analyze_abp(project_path, asset_name)
         elif asset_type == "montage":
             result = analyze_montage(project_path, asset_name)
         else:
-            result = analyze_abp(project_path, asset_name) + \
-                     "\n\n" + analyze_montage(project_path, asset_name)
-
-        return result if detail_level == "full" else _trim_for_summary(result)
+            result = analyze_abp(project_path, asset_name) + "\n\n" + analyze_montage(project_path, asset_name)
+        return result
     except Exception as e:
         return f"[analyze_ue5_animation] Error: {e}"
 
 
 @mcp.tool()
-def analyze_ue5_blueprint_mapping(project_path: str,
-                                   cpp_class: str | None = None) -> str:
-    """
-    Blueprint <-> C++ detailed mapping for a UE5 project.
+def analyze_ue5_blueprint_mapping(project_path: str, cpp_class: str | None = None) -> str:
+    """Blueprint <-> C++ detailed mapping for a UE5 project.
 
     USE THIS TOOL WHEN:
     - User asks "which Blueprints extend C++ class X?"
-    - User asks "what does BP_Character implement?"
     - User asks "which events / K2 functions does this Blueprint override?"
-    - User asks "what variables and assets are configured in this Blueprint?"
-    - User wants to understand the bridge between C++ and Blueprint logic
-
-    Scans all .uasset files and extracts for each Blueprint:
-    - cpp_parent     The C++ parent class (NativeParentClass)
-    - bp_class       The Blueprint-generated _C class name
-    - event_nodes    Entry points in the event graph with call chains
-    - k2_overrides   C++ virtual functions overridden in Blueprint (K2_ prefix)
-    - variables      Blueprint-declared variables with type hints
-    - asset_refs     /Game/ assets referenced (montages, GEs, other BPs)
-    - gameplay_tags  GameplayTag values configured in this Blueprint
-    - gas_params     GAS-specific settings (ActivationOwnedTags, etc.)
-    - cpp_refs       Additional C++ types used beyond the direct parent
 
     Args:
         project_path: Absolute path to UE5 Source or project root.
-        cpp_class:    Optional C++ class name to filter.
-                      If provided, returns only Blueprints that extend this class.
-                      If None, returns the full project-level summary.
-
-    Examples:
-        analyze_ue5_blueprint_mapping(path)
-            -> Full map: lists every C++ class and its BP implementations
-        analyze_ue5_blueprint_mapping(path, "AHSCharacterBase")
-            -> Shows all BPs that extend AHSCharacterBase with events + variables
-        analyze_ue5_blueprint_mapping(path, "UGameplayAbility")
-            -> Shows all GA Blueprints with K2_ActivateAbility chains + tags
+        cpp_class:    Optional C++ class name to filter. If None, returns full project map.
     """
     if not _UE5_BP_MAPPING_AVAILABLE:
         return "ue5_blueprint_mapping module not available."
@@ -541,20 +413,39 @@ def analyze_ue5_blueprint_mapping(project_path: str,
         if not bp_map.blueprints:
             return (
                 f"No Blueprint assets found for project at '{project_path}'.\n"
-                "This may happen if:\n"
-                "- The Content folder is empty or missing\n"
-                "- Assets are stored via Git LFS and not pulled yet\n"
-                "- The project path points to Source only (not project root)\n"
-                "Try passing the project root instead of the Source folder."
+                "Check that the Content folder exists and LFS assets are pulled."
             )
         return format_full_project_map(bp_map, cpp_class)
     except Exception as e:
         return f"[analyze_ue5_blueprint_mapping] Error: {e}"
 
 
-# ════════════════════════════════════════════════════════════════
-# ENTRY POINT
-# ════════════════════════════════════════════════════════════════
+@mcp.tool()
+def get_architecture_advice(project_path: str, focus_class: str | None = None) -> str:
+    """Diagnose the architecture of a game project and suggest improvements.
+
+    Combines scan + lint + impact analysis into a single prioritized advice report.
+    Results cached in .gdep/cache/advice.md.
+
+    USE THIS TOOL WHEN:
+    - User asks "what is the technical debt in this project?"
+    - User asks "what should I refactor first?" or "give me refactoring priorities"
+
+    Args:
+        project_path: Absolute path to the project root or source directory.
+        focus_class:  Optional class to center advice around. If None, uses highest-coupling class.
+    """
+    try:
+        from gdep.detector import detect
+        from gdep import runner
+        profile = detect(project_path)
+        result = runner.advise(profile, focus_class=focus_class)
+        if not result.ok:
+            return f"[get_architecture_advice] Error: {result.error_message}"
+        return result.stdout
+    except Exception as e:
+        return f"[get_architecture_advice] Error: {e}"
+
 
 if __name__ == "__main__":
     mcp.run()
