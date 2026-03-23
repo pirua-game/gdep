@@ -102,10 +102,10 @@ pip install gdep "mcp[cli]"
 ## 💬 Usage Examples with AI
 
 ```
-"What classes are affected if I modify BattleCore?"
+"What classes are affected if I modify CombatCore?"
 → analyze_impact_and_risk
 
-"How does the PlayHand method actually work?"
+"How does the ExecuteAction method actually work?"
 → trace_gameplay_flow
 
 "What's the tech debt level of this project?"
