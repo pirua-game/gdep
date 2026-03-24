@@ -58,8 +58,9 @@ def find_gdep(extra_hint: str | None = None) -> _GdepCmd | None:
     7. extra_hint            → user-supplied path
     8. PATH 'gdep'           → system-installed binary
     """
-    here = Path(__file__).parent.parent
-    root = here.parent  # F:/Develop/AI/gdep
+    pkg_dir = Path(__file__).parent          # gdep package dir (works for pip install)
+    here = pkg_dir.parent                    # gdep-cli/ in dev, site-packages/ when installed
+    root = here.parent                       # project root in dev; irrelevant when installed
 
     # --- 1. GDEP_DLL explicit override ---
     dll_env = os.environ.get("GDEP_DLL", "")
@@ -73,8 +74,9 @@ def find_gdep(extra_hint: str | None = None) -> _GdepCmd | None:
     if exe_env and Path(exe_env).exists():
         return _GdepCmd(args=[exe_env])
 
-    # --- 3 & 4. DLL search: prefer publish_dll/, then publish/ ---
+    # --- 3 & 4. DLL search: package bin/ first (pip install), then dev publish dirs ---
     dll_candidates = [
+        pkg_dir / "bin" / "gdep.dll",        # pip-installed package (gdep/bin/gdep.dll)
         root / "publish_dll" / "gdep.dll",
         root / "publish" / "gdep.dll",
     ]

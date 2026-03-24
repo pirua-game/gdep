@@ -37,6 +37,9 @@ Issues = "https://github.com/pirua-game/gdep/issues"
 gdep = "gdep.cli:main"
 gdep-mcp-server = "gdep_mcp.server:main"
 
-# gdep + gdep_mcp 
+# gdep + gdep_mcp
 [tool.setuptools.packages.find]
 include = ["gdep", "gdep.*", "gdep_mcp", "gdep_mcp.*"]
+
+[tool.setuptools.package-data]
+gdep = ["bin/*.dll", "bin/*.json"]

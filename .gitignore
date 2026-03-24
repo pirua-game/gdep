@@ -92,3 +92,4 @@ gdep-mcp-npm/
 # ==========================================
 Thumbs.db
 Desktop.ini
+.gdep/

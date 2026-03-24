@@ -1,0 +1,3 @@
+[console_scripts]
+gdep = gdep.cli:main
+gdep-mcp-server = gdep_mcp.server:main

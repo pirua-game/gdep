@@ -1,0 +1,8 @@
+click>=8.0
+fastapi
+uvicorn
+tree-sitter
+tree-sitter-cpp
+mcp[cli]>=1.0
+watchdog>=3.0
+websockets>=12.0
