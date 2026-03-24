@@ -267,7 +267,10 @@ def execute_gdep_cli(args: list[str]) -> str:
         )
 
         if result.returncode == 0:
-            return result.stdout or "(No output)"
+            output = result.stdout or ""
+            if result.stderr and result.stderr.strip():
+                output = (output.rstrip("\n") + "\n\n" if output.strip() else "") + result.stderr.strip()
+            return output or "(No output)"
         return (
             f"CLI Error (exit {result.returncode}):\n"
             f"{result.stderr}\n"
