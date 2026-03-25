@@ -364,13 +364,22 @@ def _cached_gas_report(project_path: str) -> GASReport:
 
 
 def analyze_gas(project_path: str,
-                class_name: str | None = None) -> str:
+                class_name: str | None = None,
+                detail_level: str = "summary",
+                category: str | None = None,
+                query: str | None = None) -> str:
     """
     Analyze GAS (Gameplay Ability System) usage in a UE5 project.
 
     Args:
         project_path: UE5 Source or project root path.
         class_name:   Optional class name filter (bypasses cache).
+        detail_level: "summary" (default) shows counts + tag distribution.
+                      "full" returns the complete report.
+        category:     Tag prefix filter, e.g. "Event" → only Event.* tags
+                      and abilities/effects referencing those tags.
+        query:        Keyword search across class names, tag names, asset names
+                      (case-insensitive).
 
     Returns:
         Formatted GAS analysis report.
@@ -379,10 +388,142 @@ def analyze_gas(project_path: str,
         report = _cached_gas_report(project_path)
     else:
         report = _build_gas_report_raw(project_path, class_name)
+
+    if category or query:
+        return _format_gas_filtered(report, category, query)
+    if detail_level == "summary":
+        return _format_gas_summary(report)
     return _format_gas_report(report)
 
 
 # ── Report Formatting ─────────────────────────────────────────
+
+def _format_gas_summary(r: GASReport) -> str:
+    """Return a compact summary with tag distribution only. ~500 tokens."""
+    lines = [
+        "# GAS Analysis — Summary",
+        f"Project: {r.project_path}",
+        "",
+        "## Counts",
+        f"- GameplayAbilities:              {len(r.abilities)}",
+        f"- GameplayEffects:                {len(r.effects)}",
+        f"- AttributeSets:                  {len(r.attr_sets)}",
+        f"- Classes with ASC:               {len(r.asc_classes)}",
+        f"- GameplayTags (in assets):        {len(r.all_tags)}",
+        f"- GAS-related .uassets:           {len(r.asset_refs)}",
+        "",
+    ]
+
+    if r.abilities:
+        lines.append(f"## Abilities ({len(r.abilities)})")
+        for ga in r.abilities[:10]:
+            lines.append(f"  - {ga.name}")
+        if len(r.abilities) > 10:
+            lines.append(f"  ... and {len(r.abilities) - 10} more")
+        lines.append("")
+
+    if r.all_tags:
+        by_prefix: dict[str, list[str]] = {}
+        for tag in r.all_tags:
+            prefix = tag.split(".")[0]
+            by_prefix.setdefault(prefix, []).append(tag)
+        lines.append(f"## Tag Distribution (by prefix)")
+        for prefix, tags in sorted(by_prefix.items(), key=lambda x: -len(x[1])):
+            lines.append(f"  {prefix}.*  ({len(tags)})")
+        lines.append("")
+        lines.append("💡 Use category=\"<Prefix>\" to filter by tag prefix, "
+                     "query=\"<keyword>\" to search, or detail_level=\"full\" for complete report.")
+
+    return "\n".join(lines)
+
+
+def _format_gas_filtered(r: GASReport,
+                          category: str | None,
+                          query: str | None) -> str:
+    """Return a filtered GASReport view. Filters applied at format time — cache unchanged."""
+    q = query.lower() if query else None
+    cat = category.lower() if category else None
+
+    def _tag_matches(tag: str) -> bool:
+        if cat and not tag.lower().startswith(cat + ".") and tag.lower() != cat:
+            return False
+        if q and q not in tag.lower():
+            return False
+        return True
+
+    def _class_matches(name: str) -> bool:
+        return not q or q in name.lower()
+
+    def _asset_matches(ref: GASAssetRef) -> bool:
+        if q and q not in ref.asset_name.lower():
+            if not any(q in c.lower() for c in ref.class_refs):
+                if not any(q in t.lower() for t in ref.tags):
+                    return False
+        return True
+
+    # Filter tags
+    matched_tags = sorted(t for t in r.all_tags if _tag_matches(t))
+
+    # Filter abilities — keep if name matches OR any tag matches
+    def _ga_matches(ga: GASClass) -> bool:
+        if q and _class_matches(ga.name):
+            return True
+        if any(_tag_matches(t) for t in ga.tags):
+            return True
+        return not (q or cat)
+
+    filtered_abilities = [ga for ga in r.abilities if _ga_matches(ga)]
+    filtered_effects   = [ge for ge in r.effects if _class_matches(ge.name)] if q else r.effects
+    filtered_assets    = [ref for ref in r.asset_refs if _asset_matches(ref)] if q else r.asset_refs
+
+    label_parts = []
+    if cat:
+        label_parts.append(f'category="{category}"')
+    if q:
+        label_parts.append(f'query="{query}"')
+    filter_label = ", ".join(label_parts)
+
+    lines = [
+        f"# GAS Analysis — Filtered ({filter_label})",
+        f"Project: {r.project_path}",
+        f"Matched: {len(matched_tags)} tags · {len(filtered_abilities)} abilities · {len(filtered_effects)} effects",
+        "",
+    ]
+
+    if matched_tags:
+        lines.append(f"## Matching Tags ({len(matched_tags)})")
+        for t in matched_tags[:30]:
+            lines.append(f"  - {t}")
+        if len(matched_tags) > 30:
+            lines.append(f"  ... and {len(matched_tags) - 30} more")
+        lines.append("")
+
+    if filtered_abilities:
+        lines.append(f"## Matching Abilities ({len(filtered_abilities)})")
+        for ga in filtered_abilities:
+            lines.append(f"\n### {ga.name}")
+            lines.append(f"  File: {Path(ga.source_file).name}")
+            rel_tags = [t for t in ga.tags if _tag_matches(t)] if (cat or q) else ga.tags
+            if rel_tags:
+                lines.append(f"  Tags: {', '.join(rel_tags[:10])}")
+            if ga.ge_refs:
+                lines.append(f"  GE applied: {', '.join(ga.ge_refs[:5])}")
+
+    if q and filtered_effects:
+        lines.append(f"\n## Matching Effects ({len(filtered_effects)})")
+        for ge in filtered_effects:
+            lines.append(f"  - {ge.name}  ({Path(ge.source_file).name})")
+
+    if q and filtered_assets:
+        lines.append(f"\n## Matching Assets ({len(filtered_assets)})")
+        for ref in filtered_assets[:20]:
+            lines.append(f"  - {ref.asset_name}")
+
+    if not matched_tags and not filtered_abilities and not (q and filtered_effects):
+        lines.append("No matches found. Try a broader filter or detail_level=\"full\".")
+
+    return "\n".join(lines)
+
 
 def _format_gas_report(r: GASReport) -> str:
     lines = [

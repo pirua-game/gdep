@@ -60,7 +60,7 @@ npm install -g gdep-mcp
 }
 ```
 
-That's it. Your AI now has **18** game-engine-aware tools available on every conversation.
+That's it. Your AI now has **19** game-engine-aware tools available on every conversation.
 
 ### What changes with MCP
 
@@ -69,12 +69,13 @@ Without gdep:  "CombatCore probably has some Manager dependencies..." ← halluc
 With gdep:     Direct deps: 2 · Indirect: 200+ UI classes · Asset: prefabs/UI/combat.prefab
 ```
 
-### 18 MCP Tools at a glance
+### 19 MCP Tools at a glance
 
 | Tool | When to use |
 |------|-------------|
 | `get_project_context` | **Always call first** — full project overview |
-| `analyze_impact_and_risk` | Before modifying any class |
+| `analyze_impact_and_risk` | Before modifying any class (`detail_level="summary"` for quick count) |
+| `explain_method_logic` | Internal control flow of a single method — Guard/Branch/Loop/Always |
 | `trace_gameplay_flow` | Trace C++ → Blueprint call chains |
 | `inspect_architectural_health` | Tech debt audit |
 | `explore_class_semantics` | Unfamiliar class deep-dive |

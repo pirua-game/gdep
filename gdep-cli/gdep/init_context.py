@@ -70,8 +70,10 @@ call the corresponding tool **immediately** without asking for confirmation.
 | If the user says / asks … | Call this tool |
 |---------------------------|---------------|
 | "what does class X do?" / "show me X" / "explain X" | `explore_class_semantics(path, "X")` |
+| "what does method X do internally?" / "conditions inside X" / "when does X return early?" | `explain_method_logic(path, "Class", "X")` |
 | "modify / refactor / rename / delete class X" | `analyze_impact_and_risk(path, "X")` |
 | "what breaks if I change X?" / "is it safe to touch X?" | `analyze_impact_and_risk(path, "X")` |
+| "quick impact of X" / "how many classes use X?" | `analyze_impact_and_risk(path, "X", detail_level="summary")` |
 | "how does [feature] work?" / "trace [method]" | `trace_gameplay_flow(path, "Class", "Method")` |
 | "what calls X?" / "where is X called from?" | `trace_gameplay_flow(path, "X", ...)` |
 | "technical debt" / "codebase health" / "circular deps" / "dead code" | `inspect_architectural_health(path)` |
@@ -322,6 +324,7 @@ def _build_tool_reference(src_path: str, kind: ProjectKind) -> list[str]:
         f'suggest_lint_fixes({p})',
         "",
         "# ── Flow tracing ──────────────────────────────────────",
+        f'explain_method_logic({p}, "<Class>", "<Method>")',
         f'trace_gameplay_flow({p}, "<Class>", "<Method>")',
         f'trace_gameplay_flow({p}, "<Class>", "<Method>", depth=6)',
         "",
@@ -331,6 +334,8 @@ def _build_tool_reference(src_path: str, kind: ProjectKind) -> list[str]:
         "",
         "# ── Impact & diff ─────────────────────────────────────",
         f'analyze_impact_and_risk({p}, "<ClassName>")',
+        f'analyze_impact_and_risk({p}, "<ClassName>", detail_level="summary")',
+        f'analyze_impact_and_risk({p}, "<ClassName>", query="<FilterKeyword>")',
         f'summarize_project_diff({p})',
         f'execute_gdep_cli(["diff",   {p}, "--commit", "HEAD~1", "--fail-on-cycles"])',
     ]

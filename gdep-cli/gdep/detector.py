@@ -70,8 +70,8 @@ def _find_project_root(start: Path) -> Path:
         # .NET solution root detection
         if any(f.endswith(".sln") for f in top_files):
             return current
-        # Axmol root detection (ax/ dir or CMakeLists.txt with 'axmol')
-        if "ax" in top_dirs:
+        # Axmol root detection (ax/ or axmol/ dir, or CMakeLists.txt with 'axmol')
+        if "ax" in top_dirs or "axmol" in top_dirs:
             return current
         if "CMakeLists.txt" in top_files:
             try:
@@ -131,13 +131,17 @@ def detect(path: str | Path) -> ProjectProfile:
             extra={"has_packages": (root / "Packages").exists()},
         )
 
-    # ── Axmol Early Detection (ax/ dir or CMakeLists.txt with 'axmol') ────
+    # ── Axmol Early Detection (ax/ or axmol/ dir, or CMakeLists.txt with 'axmol') ────
     if _is_axmol(root, top_files, top_dirs):
+        # 소스 경로 우선순위: 직접 지정 경로 > Classes/ > Source/ > root
         classes_dir = root / "Classes"
+        source_dir  = root / "Source"
         if given != root and given.is_dir() and str(given).startswith(str(root)):
             src_dirs = [given]
         elif classes_dir.exists():
             src_dirs = [classes_dir]
+        elif source_dir.exists():
+            src_dirs = [source_dir]
         else:
             src_dirs = [root]
         version_hint = _read_axmol_version(root)
@@ -404,8 +408,8 @@ def _read_dotnet_target(csproj: Path) -> str | None:
     return None
 
 def _is_axmol(root: Path, top_files: set, top_dirs: set) -> bool:
-    """Detect Axmol engine project: ax/ directory or CMakeLists.txt containing 'axmol'."""
-    if "ax" in top_dirs:
+    """Detect Axmol engine project: ax/ or axmol/ directory, or CMakeLists.txt containing 'axmol'."""
+    if "ax" in top_dirs or "axmol" in top_dirs:
         return True
     if "CMakeLists.txt" in top_files:
         try:

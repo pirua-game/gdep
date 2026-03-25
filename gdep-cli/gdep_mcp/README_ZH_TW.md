@@ -54,18 +54,51 @@ pip install gdep "mcp[cli]"
 
 ---
 
-## 🛠 工具清單（13 個）
+## 🛠 工具清單（19 個）
+
+### 上下文工具
 
 | 工具 | 說明 |
 |------|------|
 | `get_project_context` | **工作階段開始時首先呼叫** — 專案整體概覽 |
-| `analyze_impact_and_risk` | 修改類別前的影響範圍 + 程式碼檢查 |
+
+### 高層意圖工具（9 個）
+
+| 工具 | 說明 |
+|------|------|
+| `analyze_impact_and_risk` | 修改類別前的影響範圍 + 程式碼檢查。`detail_level="summary"` 快速摘要；`query=` 篩選結果 |
+| `explain_method_logic` | 單一方法內部控制流摘要 — Guard/Branch/Loop/Always 5~10 行 |
 | `trace_gameplay_flow` | 方法呼叫鏈追蹤 + 原始碼 |
 | `inspect_architectural_health` | 耦合度/循環引用/死碼/反模式 |
 | `explore_class_semantics` | 類別結構 + AI 三行摘要 |
+| `suggest_test_scope` | 修改類別後需執行的測試檔案自動推算（支援 CI JSON 輸出） |
+| `suggest_lint_fixes` | lint 問題 + 程式碼修復建議（dry-run，不修改檔案） |
+| `summarize_project_diff` | 從架構角度彙總 git diff — 循環引用增減、高耦合警告 |
+| `get_architecture_advice` | scan+lint+impact 綜合 → 結構化報告或 LLM 架構建議 |
+
+### Raw CLI 存取
+
+| 工具 | 說明 |
+|------|------|
 | `execute_gdep_cli` | 直接存取所有 gdep CLI 功能 |
+
+### Axmol / Cocos2d-x 專用
+
+| 工具 | 說明 |
+|------|------|
+| `analyze_axmol_events` | EventDispatcher/Scheduler 綁定映射 — 事件註冊/處理主體提取 |
+
+### Unity 專用
+
+| 工具 | 說明 |
+|------|------|
 | `find_unity_event_bindings` | Unity Inspector 綁定方法檢測 |
 | `analyze_unity_animator` | .controller → Layer/State/BlendTree 結構 |
+
+### UE5 專用
+
+| 工具 | 說明 |
+|------|------|
 | `analyze_ue5_gas` | GA/GE/AS 類別 + GameplayTag + ASC 使用處 |
 | `analyze_ue5_behavior_tree` | BT_* .uasset → Task/Decorator/Service |
 | `analyze_ue5_state_tree` | ST_* .uasset → Task/AIController 連結 |

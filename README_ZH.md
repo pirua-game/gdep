@@ -60,7 +60,7 @@ npm install -g gdep-mcp
 }
 ```
 
-配置完成。Claude · Cursor · Gemini 每次对话都可使用 **18 个**游戏引擎专属工具。
+配置完成。Claude · Cursor · Gemini 每次对话都可使用 **19 个**游戏引擎专属工具。
 
 ### MCP 改变什么
 
@@ -69,12 +69,13 @@ npm install -g gdep-mcp
 gdep MCP:   直接依赖 2 个 · 间接 200+ UI 类 · 资源: prefabs/UI/combat.prefab
 ```
 
-### 18 个 MCP 工具一览
+### 19 个 MCP 工具一览
 
 | 工具 | 使用时机 |
 |------|---------|
 | `get_project_context` | **始终最先调用** — 项目整体概览 |
-| `analyze_impact_and_risk` | 修改类前的安全确认 |
+| `analyze_impact_and_risk` | 修改类前的安全确认（`detail_level="summary"` 快速摘要） |
+| `explain_method_logic` | 单个方法内部控制流摘要 — Guard/Branch/Loop/Always |
 | `trace_gameplay_flow` | C++ → Blueprint 调用链追踪 |
 | `inspect_architectural_health` | 技术债务全面诊断 |
 | `explore_class_semantics` | 陌生类深度分析 |

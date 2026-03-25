@@ -46,6 +46,7 @@ from gdep_mcp.tools.suggest_test_scope import run as _test_scope_run
 from gdep_mcp.tools.suggest_lint_fixes import run as _lint_fixes_run
 from gdep_mcp.tools.summarize_project_diff import run as _diff_summary_run
 from gdep_mcp.tools.analyze_axmol_events import run as _axmol_events_run
+from gdep_mcp.tools.explain_method_logic import run as _explain_logic_run
 
 # ── 추가 분석 모듈 (3~7단계 기능) — 로드 실패해도 서버는 기동됨 ──
 try:
@@ -121,7 +122,9 @@ def get_project_context(project_path: str) -> str:
         return f"[get_project_context] Error: {e}"
 
 @mcp.tool()
-def analyze_impact_and_risk(project_path: str, class_name: str) -> str:
+def analyze_impact_and_risk(project_path: str, class_name: str,
+                             detail_level: str = "full",
+                             query: str | None = None) -> str:
     """
     Analyze the blast radius and risks before modifying a class.
 
@@ -139,8 +142,12 @@ def analyze_impact_and_risk(project_path: str, class_name: str) -> str:
     Args:
         project_path: Absolute path to Scripts (Unity) or Source (UE5) folder.
         class_name:   Class to analyze. E.g. "BattleManager", "APlayerCharacter"
+        detail_level: "summary" — affected class count + top-5 risk items (fast).
+                      "full"    — complete impact tree + all lint issues (default).
+        query:        Optional filter string — only results containing this
+                      class name or pattern are included. E.g. "Battle", "Manager"
     """
-    return _impact_run(project_path, class_name)
+    return _impact_run(project_path, class_name, detail_level, query)
 
 
 @mcp.tool()
@@ -469,7 +476,10 @@ def analyze_unity_animator(project_path: str,
 
 @mcp.tool()
 def analyze_ue5_gas(project_path: str,
-                    class_name: str | None = None) -> str:
+                    class_name: str | None = None,
+                    detail_level: str = "summary",
+                    category: str | None = None,
+                    query: str | None = None) -> str:
     """
     Analyze Gameplay Ability System (GAS) usage in a UE5 project.
 
@@ -485,6 +495,18 @@ def analyze_ue5_gas(project_path: str,
         project_path: Absolute path to UE5 Source or project root.
         class_name:   Optional — filter results to a specific class.
                       If None, scans the entire project.
+        detail_level: "summary" (default) — compact overview with tag distribution.
+                      "full" — complete report (may be large for big projects).
+        category:     Tag prefix filter. e.g. "Event" → only Event.* tags and
+                      abilities/effects that reference those tags.
+        query:        Keyword search across class names, tag names, and asset names
+                      (case-insensitive substring match).
+
+    Usage examples:
+        analyze_ue5_gas(path)                          # compact summary
+        analyze_ue5_gas(path, detail_level="full")     # complete report
+        analyze_ue5_gas(path, category="Event")        # Event.* tags only
+        analyze_ue5_gas(path, query="Dash")            # everything related to Dash
     """
     if not _UE5_GAS_AVAILABLE:
         return (
@@ -493,7 +515,7 @@ def analyze_ue5_gas(project_path: str,
         )
     try:
         from gdep.ue5_gas_analyzer import analyze_gas
-        return analyze_gas(project_path, class_name)
+        return analyze_gas(project_path, class_name, detail_level, category, query)
     except Exception as e:
         return f"[analyze_ue5_gas] Error: {e}"
 
@@ -715,6 +737,35 @@ def get_architecture_advice(project_path: str,
         return result.stdout
     except Exception as e:
         return f"[get_architecture_advice] Error: {e}"
+
+
+@mcp.tool()
+def explain_method_logic(project_path: str, class_name: str, method_name: str) -> str:
+    """
+    Extract and summarize the internal control flow logic of a specific method.
+
+    Unlike trace_gameplay_flow (which shows the call chain A→B→C),
+    this tool focuses on WHY and WHEN calls happen inside a single method —
+    returning guard conditions, branches, loops, and key calls in 5-10 lines.
+
+    USE THIS TOOL WHEN:
+    - User asks "what does method X actually do internally?"
+    - User asks "what are the conditions inside PlayHand / ActivateAbility?"
+    - User wants to understand business rules without reading the full source file
+    - User asks "when does this method return early?"
+    - User is debugging conditional logic or branching behavior
+
+    Returns:
+    - Numbered list of Guard / Branch / Loop / Always control flow items
+    - Each item shows the condition and 1-2 key calls made in that branch
+    - Source file reference for quick navigation
+
+    Args:
+        project_path: Absolute path to the project root or source folder.
+        class_name:   Class containing the method. E.g. "ManagerBattle", "AHSCharacterBase"
+        method_name:  Method to explain. E.g. "PlayHand", "ActivateAbility", "BeginPlay"
+    """
+    return _explain_logic_run(project_path, class_name, method_name)
 
 
 # ════════════════════════════════════════════════════════════════

@@ -19,7 +19,9 @@ from gdep import runner
 from gdep.detector import detect
 
 
-def run(project_path: str, class_name: str) -> str:
+def run(project_path: str, class_name: str,
+        detail_level: str = "full",
+        query: str | None = None) -> str:
     """
     Analyze the impact and risks of modifying a specific class before making changes.
 
@@ -36,21 +38,33 @@ def run(project_path: str, class_name: str) -> str:
                                 "F:/MyGame/Source/MyGame" (UE5)
         class_name:   The C++ or C# class name to analyze.
                       Examples: "BattleManager", "APlayerCharacter"
+        detail_level: "summary" — affected class count + top-5 risk items (fast, low token).
+                      "full"    — full impact tree + all lint issues (default).
+        query:        Optional class/pattern filter. Only results containing this string
+                      are included. Useful for narrowing large codebases.
 
     Returns:
         A report containing:
-        - Impact tree: which classes/prefabs/blueprints depend on this class
+        - Impact tree (or summary): which classes/prefabs/blueprints depend on this class
         - Lint results: anti-patterns found in or around this class
     """
     try:
         profile = detect(project_path)
         sections: list[str] = []
+        is_summary = detail_level.lower() == "summary"
 
         # ── Impact Analysis ──────────────────────────────────────────
         impact_result = runner.impact(profile, class_name, depth=4)
         sections.append("## Impact Analysis")
         if impact_result.ok:
-            sections.append(impact_result.stdout)
+            impact_text = impact_result.stdout
+            if query:
+                impact_lines = [l for l in impact_text.splitlines()
+                                if query.lower() in l.lower() or not l.strip()]
+                impact_text = "\n".join(impact_lines)
+            if is_summary:
+                impact_text = _summarize_impact(impact_text)
+            sections.append(impact_text)
         else:
             sections.append(f"Impact analysis failed: {impact_result.error_message}")
 
@@ -65,18 +79,37 @@ def run(project_path: str, class_name: str) -> str:
                            if i.get("class_name", "").lower() == class_name.lower()]
                 all_issues = related if related else issues
 
+                # Apply query filter
+                if query:
+                    q = query.lower()
+                    all_issues = [i for i in all_issues
+                                  if q in i.get("class_name", "").lower()
+                                  or q in i.get("message", "").lower()
+                                  or q in i.get("rule_id", "").lower()]
+
+                limit = 5 if is_summary else 20
                 if not all_issues:
                     sections.append("✓ No anti-patterns detected.")
                 else:
-                    for issue in all_issues[:20]:
+                    if is_summary:
+                        # severity breakdown + top items
+                        by_sev: dict[str, int] = {}
+                        for i in all_issues:
+                            sev = i.get("severity", "unknown")
+                            by_sev[sev] = by_sev.get(sev, 0) + 1
+                        sev_str = ", ".join(f"{v} {k}" for k, v in sorted(by_sev.items()))
+                        sections.append(f"Total: {len(all_issues)} issues ({sev_str})")
+                        sections.append("Top issues:")
+                    for issue in all_issues[:limit]:
                         loc = f"{issue.get('class_name','?')}.{issue.get('method_name','')}"
                         sections.append(
                             f"- [{issue.get('severity','?')}] {loc}: "
                             f"{issue.get('message','')} "
                             f"(Rule: {issue.get('rule_id','')})"
                         )
-                    if len(all_issues) > 20:
-                        sections.append(f"... and {len(all_issues)-20} more issues")
+                    if len(all_issues) > limit:
+                        sections.append(f"... and {len(all_issues)-limit} more issues"
+                                        + (" (use detail_level='full' to see all)" if is_summary else ""))
             except (json.JSONDecodeError, TypeError):
                 sections.append(lint_result.stdout or "No lint output")
         else:
@@ -86,3 +119,14 @@ def run(project_path: str, class_name: str) -> str:
 
     except Exception as e:
         return f"[analyze_impact_and_risk] Error: {e}"
+
+
+def _summarize_impact(impact_text: str) -> str:
+    """Condense impact output to class count + first 5 affected class names."""
+    lines = impact_text.splitlines()
+    class_lines = [l for l in lines if l.strip() and not l.startswith("#")]
+    total = len(class_lines)
+    preview = "\n".join(class_lines[:5])
+    suffix = f"\n... and {total - 5} more affected classes (use detail_level='full' to see all)" if total > 5 else ""
+    header = f"Affected classes: {total}\n"
+    return header + preview + suffix

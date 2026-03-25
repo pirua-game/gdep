@@ -54,7 +54,7 @@ pip install gdep "mcp[cli]"
 
 ---
 
-## 🛠 도구 목록 (13개)
+## 🛠 도구 목록 (19개)
 
 ### 컨텍스트 도구 — 세션 시작 시 첫 호출 권장
 
@@ -62,20 +62,31 @@ pip install gdep "mcp[cli]"
 |------|------|
 | `get_project_context` | 프로젝트 전체 개요. `.gdep/AGENTS.md` 있으면 읽고, 없으면 즉석 생성 |
 
-### High-level 의도 기반 도구 (4개)
+### High-level 의도 기반 도구 (9개)
 
 | 도구 | 설명 |
 |------|------|
-| `analyze_impact_and_risk` | 클래스 수정 전 파급 범위 + 린트 |
+| `analyze_impact_and_risk` | 클래스 수정 전 파급 범위 + 린트. `detail_level="summary"`로 빠른 요약; `query=`로 결과 필터 |
+| `explain_method_logic` | 단일 메서드 내부 제어 흐름 요약 — Guard/Branch/Loop/Always 5~10줄 |
 | `trace_gameplay_flow` | 메서드 호출 체인 추적 + 소스 코드 |
 | `inspect_architectural_health` | 결합도/순환참조/데드코드/안티패턴 |
 | `explore_class_semantics` | 클래스 구조 + AI 3줄 요약 |
+| `suggest_test_scope` | 클래스 수정 후 실행해야 할 테스트 파일 자동 산정 (CI JSON 출력 지원) |
+| `suggest_lint_fixes` | lint 이슈 + 코드 수정 제안 (dry-run, 파일 변경 없음) |
+| `summarize_project_diff` | git diff를 아키텍처 관점으로 요약 — 순환참조 신규/해소, 고결합 경고 |
+| `get_architecture_advice` | scan+lint+impact 종합 → 구조화 리포트 or LLM 아키텍처 어드바이스 |
 
 ### Raw CLI 접근 (1개)
 
 | 도구 | 설명 |
 |------|------|
 | `execute_gdep_cli` | `args: list[str]` — gdep CLI 전체 기능 직접 실행 |
+
+### Axmol / Cocos2d-x 전용 (1개)
+
+| 도구 | 설명 |
+|------|------|
+| `analyze_axmol_events` | EventDispatcher/Scheduler 바인딩 맵 — 이벤트 등록/처리 주체 추출 |
 
 ### Unity 전용 (2개)
 

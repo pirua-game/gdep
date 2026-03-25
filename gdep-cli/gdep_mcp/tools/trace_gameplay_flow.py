@@ -53,7 +53,9 @@ def run(project_path: str, class_name: str, method_name: str,
 
         if flow_result.ok:
             try:
-                data = json.loads(flow_result.stdout)
+                raw = flow_result.stdout
+                j = raw.find("{")
+                data = json.loads(raw[j:]) if j >= 0 else {}
                 nodes = data.get("nodes", [])
                 edges = data.get("edges", [])
                 # Guard: remove self-edges unconditionally (older server cache safety net)
@@ -98,19 +100,23 @@ def _render_flow_tree(nodes: list, edges: list, root_class: str, root_method: st
     if not nodes:
         return "  (No call nodes found — method may be empty or not parsed)"
 
-    # Build adjacency map
+    # Build adjacency map and condition map
     children: dict[str, list[str]] = {n["id"]: [] for n in nodes}
+    condition_map: dict[tuple[str, str], str] = {}
     for e in edges:
         frm, to = e.get("from", ""), e.get("to", "")
         if frm in children:
             children[frm].append(to)
+        cond = e.get("condition", "")
+        if cond:
+            condition_map[(frm, to)] = cond
 
     node_map = {n["id"]: n for n in nodes}
     entry_id = f"{root_class}.{root_method}"
     lines: list[str] = []
     visited_walk: set[str] = set()  # permanent — no revisits (handles cycles & self-edges)
 
-    def _walk(nid: str, prefix: str = "", is_last: bool = True):
+    def _walk(nid: str, prefix: str = "", is_last: bool = True, parent_id: str = ""):
         if nid in visited_walk:
             return
         visited_walk.add(nid)
@@ -126,15 +132,18 @@ def _render_flow_tree(nodes: list, edges: list, root_class: str, root_method: st
         label   = node.get("method", nid.split(".")[-1])
         cls     = node.get("class", "")
         display = f"{cls}.{label}" if cls and cls != root_class else label
+        cond = condition_map.get((parent_id, nid), "")
+        if cond:
+            flags += f" ({cond})"
         lines.append(f"{prefix}{connector}{display}{flags}")
         # Skip self-edges; skip already-visited children
         kids = [k for k in children.get(nid, []) if k != nid and k not in visited_walk]
         child_prefix = prefix + ("    " if is_last else "│   ")
         for i, kid in enumerate(kids):
-            _walk(kid, child_prefix, i == len(kids) - 1)
+            _walk(kid, child_prefix, i == len(kids) - 1, nid)
 
     lines.append(f"└── {root_class}.{root_method}")
     for i, child_id in enumerate(children.get(entry_id, [])):
-        _walk(child_id, "    ", i == len(children[entry_id]) - 1)
+        _walk(child_id, "    ", i == len(children[entry_id]) - 1, entry_id)
 
     return "\n".join(lines)

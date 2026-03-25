@@ -22,7 +22,8 @@ public record FlowEdgeJson(
     [property: JsonPropertyName("from")]      string From,
     [property: JsonPropertyName("to")]        string To,
     [property: JsonPropertyName("context")]   string? Context,
-    [property: JsonPropertyName("isDynamic")] bool IsDynamic
+    [property: JsonPropertyName("isDynamic")] bool IsDynamic,
+    [property: JsonPropertyName("condition")] string? Condition
 );
 
 public record FlowDispatchJson(
@@ -171,7 +172,8 @@ public class FlowCommand
                 From:      e.From.Id,
                 To:        e.To.Id,
                 Context:   e.Note,
-                IsDynamic: e.IsDynamic
+                IsDynamic: e.IsDynamic,
+                Condition: e.Condition
             ));
         }
 
@@ -237,7 +239,7 @@ public class FlowCommand
             AnsiConsole.MarkupLine(
                 $"[gray]Dynamic dispatch [yellow]{dynamicCount}[/] · " +
                 $"Leaf nodes [gray]{externalCount}[/] · " +
-                $"Unresolved receivers [red]{unknownCount}[/]");
+                $"Unresolved receivers [red]{unknownCount}[/][/]");
 
         AnsiConsole.WriteLine();
     }

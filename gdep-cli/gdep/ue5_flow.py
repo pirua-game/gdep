@@ -118,6 +118,51 @@ def _masked_body(body):
 # ── Function pointer removal ──────────────────────────────────────────
 _FUNC_PTR_PAT = re.compile(r'&\s*\w+\s*::\s*\w+')
 
+# ── Condition keyword extraction ───────────────────────────────────────
+_COND_KEYWORD_PAT = re.compile(r'\b(if|switch|while|for)\s*\(')
+
+
+def _extract_condition_at(body: str, call_offset: int) -> str:
+    """Return 'keyword: condition_text' for the innermost conditional wrapping call_offset."""
+    best_pos, best_text = -1, ""
+
+    for m in _COND_KEYWORD_PAT.finditer(body, 0, call_offset):
+        kw = m.group(1)
+        paren_start = m.end() - 1
+        depth, paren_end = 0, paren_start
+        for i in range(paren_start, min(paren_start + 2000, len(body))):
+            if body[i] == '(':
+                depth += 1
+            elif body[i] == ')':
+                depth -= 1
+                if depth == 0:
+                    paren_end = i
+                    break
+        if paren_end <= paren_start:
+            continue
+        brace_start = body.find('{', paren_end)
+        if brace_start == -1 or brace_start >= call_offset:
+            continue
+        d, inside = 0, True
+        for i in range(brace_start, call_offset):
+            if body[i] == '{':
+                d += 1
+            elif body[i] == '}':
+                d -= 1
+                if d == 0:
+                    inside = False
+                    break
+        if not inside:
+            continue
+        if m.start() > best_pos:
+            cond = body[paren_start + 1:paren_end].strip()
+            cond = ' '.join(cond.split())
+            cond = cond[:77] + "..." if len(cond) > 80 else cond
+            best_pos, best_text = m.start(), f"{kw}: {cond}"
+
+    return best_text
+
+
 # ── Direct call extraction ────────────────────────────────────────────
 _CALL_PAT = re.compile(
     r'(?:'
@@ -150,7 +195,8 @@ def _extract_calls(body):
             continue
         if re.match(r'^[A-Z][A-Z0-9_]+$', method):
             continue
-        calls.append((obj, method))
+        condition = _extract_condition_at(clean, m.start())
+        calls.append((obj, method, condition))
     return calls
 
 # ── Nodes / Edges ───────────────────────────────────────────────
@@ -169,6 +215,7 @@ class FlowEdge:
     to_id:      str
     context:    str  = ""
     is_dynamic: bool = False
+    condition:  str  = ""       # "if: ...", "switch: ...", etc.
 
 # ── Source file collection ────────────────────────────────────────────
 _IGNORE_DIRS = {"Binaries","Intermediate","Saved","Build","Content",".vs",".idea"}
@@ -292,7 +339,7 @@ def trace_flow(source_path, class_name, method_name,
         except Exception:
             return None
 
-    def visit(cls, method, depth, parent_id):
+    def visit(cls, method, depth, parent_id, condition=""):
         node_id = f"{cls}.{method}"
         if node_id not in nodes:
             nodes[node_id] = FlowNode(
@@ -303,7 +350,8 @@ def trace_flow(source_path, class_name, method_name,
             ek = (parent_id, node_id)
             if ek not in seen_edges:
                 seen_edges.add(ek)
-                edges.append(FlowEdge(from_id=parent_id, to_id=node_id))
+                edges.append(FlowEdge(from_id=parent_id, to_id=node_id,
+                                      condition=condition))
         if depth <= 0:
             nodes[node_id].is_leaf = True
             return
@@ -327,7 +375,7 @@ def trace_flow(source_path, class_name, method_name,
         if not calls:
             nodes[node_id].is_leaf = True
             return
-        for obj, callee in calls:
+        for obj, callee, cond in calls:
             callee_cls = cls
             if obj and obj not in ("this", "Super", "self"):
                 if obj[0].isupper():
@@ -341,10 +389,11 @@ def trace_flow(source_path, class_name, method_name,
                 ek = (node_id, callee_id)
                 if ek not in seen_edges:
                     seen_edges.add(ek)
-                    edges.append(FlowEdge(from_id=node_id, to_id=callee_id))
+                    edges.append(FlowEdge(from_id=node_id, to_id=callee_id,
+                                          condition=cond))
                 continue
             should_recurse = callee_cls in project_classes and depth > 1
-            visit(callee_cls, callee, depth - 1 if should_recurse else 0, node_id)
+            visit(callee_cls, callee, depth - 1 if should_recurse else 0, node_id, cond)
             # If this callee is a K2_ method and became a leaf, inject BP chain
             callee_node_id = f"{callee_cls}.{callee}"
             if (callee.startswith('K2_')
@@ -406,6 +455,7 @@ def flow_to_json(source_path, class_name, method_name,
                 "to":        e.to_id,
                 "context":   e.context,
                 "isDynamic": e.is_dynamic,
+                "condition": e.condition,
             }
             for e in edges
         ],

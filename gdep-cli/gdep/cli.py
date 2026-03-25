@@ -492,8 +492,8 @@ def watch(path, target_class, depth, debounce, kind):
       - Pre-commit review: confirm no unexpected ripple effects
     """
     try:
-        from watchdog.events import FileSystemEventHandler
         from watchdog.observers import Observer
+        from watchdog.events import FileSystemEventHandler
     except ImportError:
         _safe_echo(
             "✗ watchdog is not installed.\n"
@@ -502,9 +502,9 @@ def watch(path, target_class, depth, debounce, kind):
         )
         return
 
-    import datetime as _dt
     import threading
     import time as _time
+    import datetime as _dt
 
     profile = _get_profile(path)
     if not _check_supported(profile, kind):
@@ -512,16 +512,16 @@ def watch(path, target_class, depth, debounce, kind):
 
     resolved = str(Path(path).resolve())
 
-    _safe_echo(f"\n[gdep watch] 감시 중: {resolved}", fg="cyan")
+    _safe_echo(f"\n[gdep watch] Watching: {resolved}", fg="cyan")
     _safe_echo(
-        f"             엔진: {profile.display}"
+        f"             Engine: {profile.display}"
         f"  depth={depth}"
         f"  debounce={debounce}s",
         fg="cyan",
     )
     if target_class:
-        _safe_echo(f"             클래스 필터: {target_class}", fg="cyan")
-    _safe_echo("  Ctrl+C 로 종료\n", fg="cyan")
+        _safe_echo(f"             Class filter: {target_class}", fg="cyan")
+    _safe_echo("  Press Ctrl+C to stop\n", fg="cyan")
 
     _pending: list = [None]   # [threading.Timer | None]
 
@@ -530,7 +530,7 @@ def watch(path, target_class, depth, debounce, kind):
         now = _dt.datetime.now().strftime("%H:%M:%S")
         sep = "─" * 45
 
-        _safe_echo(f"\n  변경 감지: {Path(changed_file).name}  ({now})", fg="yellow")
+        _safe_echo(f"\n  Changed: {Path(changed_file).name}  ({now})", fg="yellow")
         _safe_echo(f"  {sep}")
 
         # ── 1. impact ──────────────────────────────────────────
@@ -540,9 +540,9 @@ def watch(path, target_class, depth, debounce, kind):
                 1 for ln in impact_result.stdout.splitlines()
                 if ln.strip().startswith(("├", "└", "│")) and ln.strip()
             )
-            _safe_echo(f"  영향 클래스:  {affected_count}개  (depth={depth})")
+            _safe_echo(f"  Affected:  {affected_count}  (depth={depth})")
         else:
-            _safe_echo("  영향 클래스:  (분석 실패)", fg="red")
+            _safe_echo("  Affected:  (analysis failed)", fg="red")
 
         # ── 2. test-scope ──────────────────────────────────────
         ts_result = runner.test_scope(profile, cls_name, depth=depth, fmt="json")
@@ -551,11 +551,11 @@ def watch(path, target_class, depth, debounce, kind):
                 import json as _json
                 ts_data = _json.loads(ts_result.stdout)
                 test_count = ts_data.get("test_file_count", 0)
-                _safe_echo(f"  테스트 파일:  {test_count}개")
+                _safe_echo(f"  Tests:     {test_count}")
             except Exception:
-                _safe_echo("  테스트 파일:  (파싱 실패)", fg="yellow")
+                _safe_echo("  Tests:     (parse error)", fg="yellow")
         else:
-            _safe_echo("  테스트 파일:  (분석 실패)", fg="red")
+            _safe_echo("  Tests:     (analysis failed)", fg="red")
 
         # ── 3. lint ────────────────────────────────────────────
         lint_result = runner.lint(profile, fmt="json")
@@ -581,26 +581,26 @@ def watch(path, target_class, depth, debounce, kind):
                 if cls_name.lower() in c.get("message", "").lower()
             ]
             if relevant_cycles:
-                cycle_msg = relevant_cycles[0].get("message", "순환참조 감지됨")
-                _safe_echo(f"  순환참조:    ⚠ {cycle_msg}", fg="yellow")
+                cycle_msg = relevant_cycles[0].get("message", "circular ref detected")
+                _safe_echo(f"  Circular:  ! {cycle_msg}", fg="yellow")
 
             if errors or warnings:
                 parts = []
                 if errors:
                     # Show first error rule_id for context
                     rule = errors[0].get("rule_id", "")
-                    parts.append(f"× {len(errors)} 오류" + (f"  [{rule}]" if rule else ""))
+                    parts.append(f"x {len(errors)} error(s)" + (f"  [{rule}]" if rule else ""))
                 if warnings:
-                    parts.append(f"! {len(warnings)} 경고")
+                    parts.append(f"! {len(warnings)} warning(s)")
                 _safe_echo(f"  Lint:        {',  '.join(parts)}", fg="red" if errors else "yellow")
             else:
-                _safe_echo("  Lint:        ✓ 이상 없음", fg="green")
+                _safe_echo("  Lint:        OK", fg="green")
         else:
-            _safe_echo("  Lint:        (분석 실패)", fg="yellow")
+            _safe_echo("  Lint:        (analysis failed)", fg="yellow")
 
         elapsed = _time.time() - t0
         _safe_echo(f"  {sep}")
-        _safe_echo(f"  처리 시간: {elapsed:.2f}s (warm cache)", fg="cyan")
+        _safe_echo(f"  Elapsed:   {elapsed:.2f}s", fg="cyan")
 
     def _schedule(cls_name: str, changed_file: str) -> None:
         if _pending[0] is not None:
@@ -637,7 +637,7 @@ def watch(path, target_class, depth, debounce, kind):
         while observer.is_alive():
             observer.join(timeout=1)
     except KeyboardInterrupt:
-        _safe_echo("\n[gdep watch] 종료합니다.", fg="cyan")
+        _safe_echo("\n[gdep watch] Stopped.", fg="cyan")
     finally:
         observer.stop()
         observer.join()

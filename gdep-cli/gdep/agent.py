@@ -70,15 +70,15 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "scan",
-            "description": "프로젝트 의존성 분석. 결합도 상위 클래스, 순환 참조, 데드코드를 반환합니다.",
+            "description": "Analyze project dependencies. Returns top coupled classes, circular refs, dead code.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "circular":     {"type": "boolean", "description": "순환 참조 포함 (기본: true)"},
-                    "dead_code":    {"type": "boolean", "description": "미참조 클래스 탐지 (기본: false)"},
-                    "deep":         {"type": "boolean", "description": "메서드 바디까지 정밀 분석 (기본: false)"},
-                    "include_refs": {"type": "boolean", "description": "엔진 에셋 역참조 반영 (기본: false)"},
-                    "top":          {"type": "integer", "description": "상위 N개 출력 (기본: 20)"},
+                    "circular":     {"type": "boolean", "description": "Include circular references (default: true)"},
+                    "dead_code":    {"type": "boolean", "description": "Detect unreferenced classes (default: false)"},
+                    "deep":         {"type": "boolean", "description": "Deep analysis including method bodies (default: false)"},
+                    "include_refs": {"type": "boolean", "description": "Include engine asset back-references (default: false)"},
+                    "top":          {"type": "integer", "description": "Top N classes to output (default: 20)"},
                 },
                 "required": [],
             },
@@ -88,11 +88,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "describe",
-            "description": "특정 클래스의 필드·메서드·의존성을 반환합니다. 코드를 읽기 전에 먼저 호출하세요.",
+            "description": "Returns fields, methods, and dependencies of a class. Call this before read_source.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "class_name": {"type": "string", "description": "클래스 이름"},
+                    "class_name": {"type": "string", "description": "Class name"},
                 },
                 "required": ["class_name"],
             },
@@ -102,12 +102,12 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "read_source",
-            "description": "클래스의 실제 소스 코드를 반환합니다. C# partial class와 C++ .h/.cpp를 모두 지원합니다.",
+            "description": "Returns actual source code of a class. Supports C# partial classes and C++ .h/.cpp pairs.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "class_name": {"type": "string"},
-                    "max_chars":  {"type": "integer", "description": "최대 문자 수 (기본: 8000, 최대: 15000)"},
+                    "max_chars":  {"type": "integer", "description": "Max characters (default: 8000, max: 15000)"},
                 },
                 "required": ["class_name"],
             },
@@ -117,14 +117,14 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "flow",
-            "description": "메서드 호출 체인을 추적합니다. lock/async/동적 디스패치 경계를 포함합니다.",
+            "description": "Traces method call chains. Includes lock/async/dynamic dispatch boundaries.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "class_name":    {"type": "string"},
                     "method_name":   {"type": "string"},
-                    "depth":         {"type": "integer", "description": "추적 깊이 (기본: 2, 최대: 3)"},
-                    "focus_classes": {"type": "string", "description": "집중할 클래스 (쉼표 구분)"},
+                    "depth":         {"type": "integer", "description": "Trace depth (default: 2, max: 3)"},
+                    "focus_classes": {"type": "string", "description": "Classes to focus on (comma-separated)"},
                 },
                 "required": ["class_name", "method_name"],
             },
@@ -134,12 +134,12 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "impact",
-            "description": "클래스 변경 파급 범위를 역방향 추적합니다.",
+            "description": "Reverse-traces the blast radius of a class change.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "target_class": {"type": "string"},
-                    "depth":        {"type": "integer", "description": "분석 깊이 (기본: 3)"},
+                    "depth":        {"type": "integer", "description": "Analysis depth (default: 3)"},
                 },
                 "required": ["target_class"],
             },
@@ -149,7 +149,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "lint",
-            "description": "게임 엔진 특화 안티패턴을 스캔합니다. UNI-PERF, UE5-GAS, UE5-NET 규칙 포함.",
+            "description": "Scans for game-engine-specific anti-patterns. Includes UNI-PERF, UE5-GAS, UE5-NET rules.",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
@@ -157,11 +157,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "graph",
-            "description": "의존성 그래프를 Mermaid 형식으로 반환합니다.",
+            "description": "Returns the dependency graph in Mermaid format.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "cycles_only": {"type": "boolean", "description": "순환 참조만 표시 (기본: true)"},
+                    "cycles_only": {"type": "boolean", "description": "Show only circular references (default: true)"},
                 },
                 "required": [],
             },
@@ -171,11 +171,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "diff",
-            "description": "git 커밋 전후 의존성 변화를 비교합니다.",
+            "description": "Compares dependency changes between git commits.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "commit": {"type": "string", "description": "git 커밋 해시 또는 브랜치명"},
+                    "commit": {"type": "string", "description": "git commit hash or branch name"},
                 },
                 "required": [],
             },
@@ -185,7 +185,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "find_prefab_refs",
-            "description": "[Unity 전용] MonoBehaviour 클래스가 어느 Prefab/Scene에 붙어있는지 찾습니다.",
+            "description": "[Unity only] Finds which Prefab/Scene a MonoBehaviour class is attached to.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -199,7 +199,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "find_blueprint_refs",
-            "description": "[UE5 전용] C++ 클래스를 상속하거나 참조하는 Blueprint/Map .uasset을 찾습니다.",
+            "description": "[UE5 only] Finds Blueprint/Map .uasset files that inherit or reference a C++ class.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -213,11 +213,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "analyze_gas",
-            "description": "[UE5 전용] GameplayAbility / GameplayEffect / AttributeSet / GameplayTag 전체 구조를 분석합니다.",
+            "description": "[UE5 only] Analyzes full GAS structure: GameplayAbility / GameplayEffect / AttributeSet / GameplayTag.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "class_name": {"type": "string", "description": "특정 클래스 필터 (없으면 전체)"},
+                    "class_name": {"type": "string", "description": "Filter by specific class (omit for all)"},
                 },
                 "required": [],
             },
@@ -227,13 +227,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "analyze_animation",
-            "description": "[UE5 전용] AnimBlueprint(ABP) 상태머신과 AnimMontage 구조를 분석합니다.",
+            "description": "[UE5 only] Analyzes AnimBlueprint (ABP) state machines and AnimMontage structure.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "asset_type":   {"type": "string", "enum": ["all", "abp", "montage"], "description": "분석 대상 (기본: all)"},
-                    "asset_name":   {"type": "string", "description": "특정 에셋 이름 필터"},
-                    "detail_level": {"type": "string", "enum": ["summary", "full"], "description": "상세도 (기본: summary)"},
+                    "asset_type":   {"type": "string", "enum": ["all", "abp", "montage"], "description": "Asset type to analyze (default: all)"},
+                    "asset_name":   {"type": "string", "description": "Filter by specific asset name"},
+                    "detail_level": {"type": "string", "enum": ["summary", "full"], "description": "Detail level (default: summary)"},
                 },
                 "required": [],
             },
@@ -243,11 +243,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "analyze_behavior_tree",
-            "description": "[UE5 전용] BehaviorTree(BT_*) 에셋의 Task/Decorator/Service/Blackboard 구조를 분석합니다.",
+            "description": "[UE5 only] Analyzes BehaviorTree (BT_*) asset: Task/Decorator/Service/Blackboard structure.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "asset_name": {"type": "string", "description": "특정 BT 에셋 이름 필터"},
+                    "asset_name": {"type": "string", "description": "Filter by specific BT asset name"},
                 },
                 "required": [],
             },
@@ -257,11 +257,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "analyze_state_tree",
-            "description": "[UE5 전용] StateTree(ST_*) 에셋과 AIController 연결 구조를 분석합니다.",
+            "description": "[UE5 only] Analyzes StateTree (ST_*) assets and AIController connection structure.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "asset_name": {"type": "string", "description": "특정 ST 에셋 이름 필터"},
+                    "asset_name": {"type": "string", "description": "Filter by specific ST asset name"},
                 },
                 "required": [],
             },
@@ -271,11 +271,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "blueprint_mapping",
-            "description": "[UE5 전용] C++ 클래스 → Blueprint 구현체 매핑. K2 오버라이드, 변수, GameplayTag를 포함합니다.",
+            "description": "[UE5 only] Maps C++ classes to Blueprint implementations. Includes K2 overrides, variables, GameplayTags.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "cpp_class": {"type": "string", "description": "C++ 클래스 이름 (없으면 전체 프로젝트)"},
+                    "cpp_class": {"type": "string", "description": "C++ class name (omit for whole project)"},
                 },
                 "required": [],
             },
@@ -285,11 +285,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "unity_events",
-            "description": "[Unity 전용] Prefab/Scene/Asset의 Inspector 이벤트 바인딩 메서드를 검출합니다.",
+            "description": "[Unity only] Detects Inspector event binding methods in Prefab/Scene/Asset.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "method_name": {"type": "string", "description": "메서드 이름 필터 (없으면 전체)"},
+                    "method_name": {"type": "string", "description": "Filter by method name (omit for all)"},
                 },
                 "required": [],
             },
@@ -312,7 +312,7 @@ class ToolExecutor:
     def execute(self, tool_name: str, args: dict) -> str:
         key = self._cache_key(tool_name, args)
         if key in self._cache:
-            return f"[캐시] 이미 실행된 결과:\n{self._cache[key]}"
+            return f"[cached] Previous result:\n{self._cache[key]}"
 
         out = self._run(tool_name, args)
         self._cache[key] = out
@@ -328,7 +328,7 @@ class ToolExecutor:
                             include_refs=args.get("include_refs", False),
                             top=args.get("top", 20))
             out = r.stdout if r.ok else f"Error: {r.error_message}"
-            return out[:2500] + "\n[생략...]" if len(out) > 2500 else out
+            return out[:2500] + "\n[truncated...]" if len(out) > 2500 else out
 
         elif tool_name == "describe":
             r = runner.describe(p, class_name=args["class_name"])
@@ -342,9 +342,9 @@ class ToolExecutor:
             sr = find_class_files(self.scripts_path, args["class_name"])
             if sr.chunks:
                 out = format_for_llm(sr, max_chars=max_chars)
-                prefix = f"ℹ️ partial class ({sr.total_parts}개 파일)\n\n" if sr.is_partial else ""
+                prefix = f"partial class ({sr.total_parts} files)\n\n" if sr.is_partial else ""
                 return prefix + out
-            return f"소스 파일을 찾을 수 없습니다: `{args['class_name']}`"
+            return f"Source file not found: `{args['class_name']}`"
 
         elif tool_name == "flow":
             focus = [f.strip() for f in args["focus_classes"].split(",")
@@ -359,29 +359,29 @@ class ToolExecutor:
             r = runner.impact(p, target_class=args["target_class"],
                               depth=args.get("depth", 3))
             out = r.stdout if r.ok else f"Error: {r.error_message}"
-            return out[:2500] + "\n[생략...]" if len(out) > 2500 else out
+            return out[:2500] + "\n[truncated...]" if len(out) > 2500 else out
 
         elif tool_name == "lint":
             r = runner.lint(p)
             out = r.stdout if r.ok else f"Error: {r.error_message}"
-            return out[:2500] + "\n[생략...]" if len(out) > 2500 else out
+            return out[:2500] + "\n[truncated...]" if len(out) > 2500 else out
 
         elif tool_name == "graph":
             r = runner.graph(p, fmt="mermaid",
                              cycles_only=args.get("cycles_only", True))
             out = r.stdout if r.ok else f"Error: {r.error_message}"
-            return out[:1500] + "\n[생략...]" if len(out) > 1500 else out
+            return out[:1500] + "\n[truncated...]" if len(out) > 1500 else out
 
         elif tool_name == "diff":
             r = runner.diff(p, commit=args.get("commit"))
             out = r.stdout if r.ok else f"Error: {r.error_message}"
-            return out[:2000] + "\n[생략...]" if len(out) > 2000 else out
+            return out[:2000] + "\n[truncated...]" if len(out) > 2000 else out
 
         elif tool_name == "find_prefab_refs":
             from .unity_refs import build_ref_map, format_ref_result
             ref_map = build_ref_map(self.scripts_path)
             if ref_map is None:
-                return "Unity 프로젝트가 아니거나 Assets 폴더를 찾을 수 없습니다."
+                return "Not a Unity project or Assets folder not found."
             ref = ref_map.get(args["class_name"])
             return format_ref_result(ref, args["class_name"])
 
@@ -389,7 +389,7 @@ class ToolExecutor:
             from .ue5_blueprint_refs import build_ref_map, format_ref_result
             ref_map = build_ref_map(self.scripts_path)
             if ref_map is None:
-                return "UE5 프로젝트가 아니거나 Content 폴더를 찾을 수 없습니다."
+                return "Not a UE5 project or Content folder not found."
             ref = ref_map.get(args["class_name"])
             return format_ref_result(ref, args["class_name"])
 
@@ -440,7 +440,7 @@ class ToolExecutor:
             event_map = build_event_map(self.scripts_path)
             return format_event_result(event_map, args.get("method_name"))
 
-        return f"알 수 없는 도구: {tool_name}"
+        return f"Unknown tool: {tool_name}"
 
 
 def _cpp_variants(name: str) -> list[str]:
@@ -470,9 +470,9 @@ def _summarize_flow(stdout: str) -> str:
 
     lines = [
         f"## Flow: {data.get('entry', '?')}",
-        f"노드 {len(nodes)} / 엣지 {len(edges)} / 디스패치 {len(dispatches)}"
-        + (" / 🔵 BP bridge" if bp_bridge else ""),
-        "", "### 주요 호출 관계",
+        f"Nodes {len(nodes)} / Edges {len(edges)} / Dispatches {len(dispatches)}"
+        + (" / BP bridge" if bp_bridge else ""),
+        "", "### Key call relationships",
     ]
     seen: set[str] = set()
     for e in edges[:40]:
@@ -485,7 +485,7 @@ def _summarize_flow(stdout: str) -> str:
         lines.append(f"- {e['from'].split('.')[-1]} → {e['to'].split('.')[-1]}"
                      + (f" [{ctx}]" if ctx else "") + bp)
     if dispatches:
-        lines += ["", "### 동적 디스패치"]
+        lines += ["", "### Dynamic dispatches"]
         for d in dispatches[:8]:
             lines.append(f"- {d['from']}: {d['handler']}")
     return "\n".join(lines)
@@ -502,7 +502,7 @@ def _summarize_describe(stdout: str) -> str:
         if s and count < 15:
             result.append(line); count += 1
         elif count == 15:
-            result.append("  ... (생략)"); count += 1
+            result.append("  ... (truncated)"); count += 1
     out = "\n".join(result)
     return out[:2500] if len(out) > 2500 else out
 
@@ -549,39 +549,39 @@ class gdepAgent:
         # 엔진별 전략 힌트
         if "Unity" in engine:
             engine_guide = """
-## Unity 분석 전략
-1. describe → read_source → flow 순서로 접근
-2. Inspector 이벤트 바인딩은 unity_events로 확인
-3. 컴포넌트가 어느 Prefab에 붙었는지는 find_prefab_refs로 확인
-4. Update/Tick 안티패턴은 lint로 탐지"""
+## Unity Analysis Strategy
+1. Use describe -> read_source -> flow in order
+2. Check Inspector event bindings with unity_events
+3. Find which Prefab a component is attached to with find_prefab_refs
+4. Detect Update/Tick anti-patterns with lint"""
         elif "Unreal" in engine or "UE5" in engine:
             engine_guide = """
-## UE5 분석 전략
-1. describe → read_source → flow 순서로 접근
-2. GAS 시스템 전체 파악은 analyze_gas 먼저 호출
-3. C++ 클래스의 Blueprint 구현체는 blueprint_mapping으로 확인
-4. ABP/Montage 구조는 analyze_animation으로 확인
-5. AI 행동 트리는 analyze_behavior_tree로 확인
-6. Blueprint에서 참조하는 C++ 클래스는 find_blueprint_refs로 확인"""
+## UE5 Analysis Strategy
+1. Use describe -> read_source -> flow in order
+2. Call analyze_gas first for a full picture of the GAS system
+3. Check Blueprint implementations of C++ classes with blueprint_mapping
+4. Analyze ABP/Montage structure with analyze_animation
+5. Check AI behavior trees with analyze_behavior_tree
+6. Find C++ classes referenced by Blueprints with find_blueprint_refs"""
         else:
             engine_guide = ""
 
-        return f"""당신은 게임 클라이언트 코드베이스 분석 전문가입니다.
-프로젝트: {profile.name} ({engine})
-분석 경로: {src}
+        return f"""You are an expert game client codebase analyst.
+Project: {profile.name} ({engine})
+Analysis path: {src}
 {engine_guide}
 
-## 사용 가능한 도구 (16개)
-**공통**: scan, describe, read_source, flow, impact, lint, graph, diff
-**Unity 전용**: find_prefab_refs, unity_events
-**UE5 전용**: find_blueprint_refs, analyze_gas, analyze_animation, analyze_behavior_tree, analyze_state_tree, blueprint_mapping
+## Available tools (16)
+**Common**: scan, describe, read_source, flow, impact, lint, graph, diff
+**Unity only**: find_prefab_refs, unity_events
+**UE5 only**: find_blueprint_refs, analyze_gas, analyze_animation, analyze_behavior_tree, analyze_state_tree, blueprint_mapping
 
-## 규칙
-- 동일한 인수로 같은 도구를 반복 호출하지 마세요
-- 충분한 정보를 수집한 후 한국어로 최종 답변을 제공하세요
-- 도구 호출은 최대 {max_calls}회입니다
-- 이전 대화 컨텍스트를 기억하고 일관성 있게 응답하세요
-- 코드 분석 시 실제 소스를 read_source로 확인한 후 판단하세요"""
+## Rules
+- Do not call the same tool with the same arguments more than once
+- Provide your final answer in English after gathering sufficient information
+- Maximum {max_calls} tool calls allowed
+- Remember prior conversation context and respond consistently
+- When analyzing code, always confirm with read_source before drawing conclusions"""
 
     def run(
         self,
@@ -646,7 +646,7 @@ class gdepAgent:
                 preview = result
                 if tool_name == "read_source" and len(result) > 400:
                     lines   = result.splitlines()
-                    preview = "\n".join(lines[:10]) + f"\n... (총 {len(lines)}줄)"
+                    preview = "\n".join(lines[:10]) + f"\n... ({len(lines)} lines total)"
 
                 yield {"type": "tool_result", "tool": tool_name, "result": preview}
                 messages.append({"role": "tool", "content": result})
@@ -655,7 +655,7 @@ class gdepAgent:
         # 최대 호출 도달 → 마지막으로 답변 요청
         messages.append({
             "role":    "user",
-            "content": "지금까지 수집한 정보를 바탕으로 한국어로 최종 분석을 제공해주세요.",
+            "content": "Based on the information gathered so far, provide your final analysis in English.",
         })
         try:
             response = llm_chat(cfg, messages, tools=None)

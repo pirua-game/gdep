@@ -128,13 +128,16 @@ function makeEdges(fedges: FlowEdge[]): Edge[] {
     seen.add(key)
     const color = edgeColor(e)
     const isBpEdge = e.context === 'blueprint'
+    const condLabel = e.condition ?? undefined
+    const ctxLabel  = e.context ?? (e.isDynamic ? 'dispatch' : undefined)
+    const label     = condLabel ?? ctxLabel
     return [{
       id: key, source: e.from, target: e.to,
-      label:        e.context ?? (e.isDynamic ? 'dispatch' : undefined),
+      label,
       animated:     !!e.isDynamic,
       style:        { stroke: color, strokeDasharray: isBpEdge ? '6 3' : undefined },
       markerEnd:    { type: MarkerType.ArrowClosed, color },
-      labelStyle:   { fontSize: 11, fill: isBpEdge ? '#3B82F6' : '#9CA3AF' },
+      labelStyle:   { fontSize: condLabel ? 10 : 11, fill: isBpEdge ? '#3B82F6' : condLabel ? '#94a3b8' : '#9CA3AF' },
       labelBgStyle: { fill: '#1F2937' },
     }]
   })

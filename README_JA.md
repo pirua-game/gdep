@@ -59,7 +59,7 @@ npm install -g gdep-mcp
 }
 ```
 
-設定完了。Claude · Cursor · Gemini が毎会話でゲームエンジン特化の **18 個** のツールを使えます。
+設定完了。Claude · Cursor · Gemini が毎会話でゲームエンジン特化の **19 個** のツールを使えます。
 
 ### MCP が変えること
 
@@ -68,12 +68,13 @@ npm install -g gdep-mcp
 gdep MCP:   直接依存 2 件 · 間接 200 件以上の UI クラス · アセット: prefabs/UI/combat.prefab
 ```
 
-### MCP ツール一覧（18 個）
+### MCP ツール一覧（19 個）
 
 | ツール | 使用タイミング |
 |--------|-------------|
 | `get_project_context` | **必ず最初に呼び出す** — プロジェクト全体概要 |
-| `analyze_impact_and_risk` | クラス変更前の安全確認 |
+| `analyze_impact_and_risk` | クラス変更前の安全確認（`detail_level="summary"` で高速要約） |
+| `explain_method_logic` | 単一メソッドの内部制御フロー要約 — Guard/Branch/Loop/Always |
 | `trace_gameplay_flow` | C++ → Blueprint 呼び出しチェーン追跡 |
 | `inspect_architectural_health` | 技術的負債の全体診断 |
 | `explore_class_semantics` | 未知クラスの詳細把握 |

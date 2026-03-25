@@ -86,6 +86,50 @@ def _masked_body(body: str) -> str:
 
 _FUNC_PTR_PAT = re.compile(r'&\s*\w+\s*::\s*\w+')
 
+_COND_KEYWORD_PAT = re.compile(r'\b(if|switch|while|for)\s*\(')
+
+
+def _extract_condition_at(body: str, call_offset: int) -> str:
+    """Return 'keyword: condition_text' for the innermost conditional wrapping call_offset."""
+    best_pos, best_text = -1, ""
+
+    for m in _COND_KEYWORD_PAT.finditer(body, 0, call_offset):
+        kw = m.group(1)
+        paren_start = m.end() - 1
+        depth, paren_end = 0, paren_start
+        for i in range(paren_start, min(paren_start + 2000, len(body))):
+            if body[i] == '(':
+                depth += 1
+            elif body[i] == ')':
+                depth -= 1
+                if depth == 0:
+                    paren_end = i
+                    break
+        if paren_end <= paren_start:
+            continue
+        brace_start = body.find('{', paren_end)
+        if brace_start == -1 or brace_start >= call_offset:
+            continue
+        d, inside = 0, True
+        for i in range(brace_start, call_offset):
+            if body[i] == '{':
+                d += 1
+            elif body[i] == '}':
+                d -= 1
+                if d == 0:
+                    inside = False
+                    break
+        if not inside:
+            continue
+        if m.start() > best_pos:
+            cond = body[paren_start + 1:paren_end].strip()
+            cond = ' '.join(cond.split())
+            cond = cond[:77] + "..." if len(cond) > 80 else cond
+            best_pos, best_text = m.start(), f"{kw}: {cond}"
+
+    return best_text
+
+
 _CALL_PAT = re.compile(
     r'(?:'
     r'(?:(\w+)\s*->\s*(\w+))'       # ptr->method
@@ -96,7 +140,7 @@ _CALL_PAT = re.compile(
     r')\s*\('
 )
 
-def _extract_calls(body: str) -> list[tuple[str, str]]:
+def _extract_calls(body: str) -> list[tuple[str, str, str]]:
     clean = _remove_comments(body)
     clean = _masked_body(clean)
     clean = _FUNC_PTR_PAT.sub('', clean)
@@ -119,7 +163,8 @@ def _extract_calls(body: str) -> list[tuple[str, str]]:
         # Skip ALL_CAPS macros
         if re.match(r'^[A-Z][A-Z0-9_]+$', method):
             continue
-        calls.append((obj, method))
+        condition = _extract_condition_at(clean, m.start())
+        calls.append((obj, method, condition))
     return calls
 
 
@@ -202,6 +247,7 @@ class FlowEdge:
     to_id:      str
     context:    str  = ""       # "virtual", "callback", etc.
     is_dynamic: bool = False
+    condition:  str  = ""       # "if: ...", "switch: ...", etc.
 
 
 # ── Core trace logic ──────────────────────────────────────────
@@ -236,7 +282,8 @@ def trace_flow(
         except Exception:
             return None
 
-    def visit(cls: str, method: str, depth: int, parent_id: str | None):
+    def visit(cls: str, method: str, depth: int, parent_id: str | None,
+              condition: str = ""):
         node_id = f"{cls}.{method}"
 
         if node_id not in nodes:
@@ -249,7 +296,8 @@ def trace_flow(
             ek = (parent_id, node_id)
             if ek not in seen_edges:
                 seen_edges.add(ek)
-                edges.append(FlowEdge(from_id=parent_id, to_id=node_id))
+                edges.append(FlowEdge(from_id=parent_id, to_id=node_id,
+                                      condition=condition))
 
         if depth <= 0:
             nodes[node_id].is_leaf = True
@@ -274,7 +322,7 @@ def trace_flow(
             nodes[node_id].is_leaf = True
             return
 
-        for obj, callee in calls:
+        for obj, callee, cond in calls:
             callee_cls = cls
             if obj and obj not in ("this", "self"):
                 # Upper-case object names are likely class names / singletons
@@ -293,13 +341,14 @@ def trace_flow(
                 ek = (node_id, callee_id)
                 if ek not in seen_edges:
                     seen_edges.add(ek)
-                    edges.append(FlowEdge(from_id=node_id, to_id=callee_id))
+                    edges.append(FlowEdge(from_id=node_id, to_id=callee_id,
+                                          condition=cond))
                 continue
 
             should_recurse = callee_cls in project_classes and depth > 1
             visit(callee_cls, callee,
                   depth - 1 if should_recurse else 0,
-                  node_id)
+                  node_id, cond)
 
     visit(class_name, method_name, max_depth, None)
     return list(nodes.values()), edges
@@ -342,6 +391,7 @@ def flow_to_json(
                 "to":        e.to_id,
                 "context":   e.context,
                 "isDynamic": e.is_dynamic,
+                "condition": e.condition,
             }
             for e in edges
         ],

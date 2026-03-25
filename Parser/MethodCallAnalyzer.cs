@@ -25,7 +25,8 @@ public record CallEdge(
     CallNode From,
     CallNode To,
     string? Note = null,
-    bool IsDynamic = false
+    bool IsDynamic = false,
+    string? Condition = null
 );
 
 public class CallGraph
@@ -296,8 +297,9 @@ public class MethodCallAnalyzer
                 ? MakeNode(targetClass, targetMethod, isDynamic, isExternal: isLeaf)
                 : new CallNode("?", targetMethod, IsExternal: true, IsHandlerDispatch: isDynamic);
 
+            var condition = ExtractConditionContext(inv);
             graph.AddNode(toNode);
-            graph.AddEdge(new CallEdge(fromNode, toNode, context, isDynamic));
+            graph.AddEdge(new CallEdge(fromNode, toNode, context, isDynamic, condition));
 
             if (targetClass != null && !isDynamic && !isLeaf)
                 Dfs(targetClass, targetMethod, toNode, depth + 1, maxDepth, visited, graph, focusClasses);
@@ -467,6 +469,39 @@ public class MethodCallAnalyzer
             return "lambda";
         }
         if (ancestors.OfType<AwaitExpressionSyntax>().Any()) return "await";
+        return null;
+    }
+
+    private string? ExtractConditionContext(InvocationExpressionSyntax inv)
+    {
+        foreach (var ancestor in inv.Ancestors())
+        {
+            if (ancestor is IfStatementSyntax ifStmt)
+            {
+                var cond = ifStmt.Condition.ToString();
+                if (cond.Length > 80) cond = cond[..77] + "...";
+                return $"if: {cond}";
+            }
+            if (ancestor is SwitchStatementSyntax switchStmt)
+            {
+                var expr = switchStmt.Expression.ToString();
+                if (expr.Length > 80) expr = expr[..77] + "...";
+                return $"switch: {expr}";
+            }
+            if (ancestor is WhileStatementSyntax whileStmt)
+            {
+                var cond = whileStmt.Condition.ToString();
+                if (cond.Length > 80) cond = cond[..77] + "...";
+                return $"while: {cond}";
+            }
+            if (ancestor is ForEachStatementSyntax foreachStmt)
+            {
+                var expr = foreachStmt.Expression.ToString();
+                if (expr.Length > 80) expr = expr[..77] + "...";
+                return $"foreach: {expr}";
+            }
+            if (ancestor is MethodDeclarationSyntax) break;
+        }
         return null;
     }
 

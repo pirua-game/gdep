@@ -29,7 +29,7 @@ export interface FlowNode {
   id: string; class: string; method: string; label: string
   isEntry?: boolean; isLeaf?: boolean; isAsync?: boolean; isDispatch?: boolean
 }
-export interface FlowEdge { from: string; to: string; context?: string; isDynamic?: boolean }
+export interface FlowEdge { from: string; to: string; context?: string; isDynamic?: boolean; condition?: string }
 export interface FlowData {
   entry: string; entryClass: string; depth: number
   nodes: FlowNode[]; edges: FlowEdge[]
