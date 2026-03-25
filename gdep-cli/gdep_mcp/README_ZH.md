@@ -45,7 +45,7 @@ pip install gdep "mcp[cli]"
   "mcpServers": {
     "gdep": {
       "command": "/path/to/gdep-cli/.venv/bin/python",
-      "args": ["/path/to/gdep-cli/gdep-mcp/server.py"],
+      "args": ["/path/to/gdep-cli/gdep_mcp/server.py"],
       "cwd": "/path/to/gdep-cli"
     }
   }

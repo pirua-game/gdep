@@ -472,7 +472,9 @@ def _get_class_summary(profile: ProjectProfile, class_name: str,
     from .llm_provider import summarize_class
     summary = summarize_class(class_name, context)
 
-    if summary and "Failed" not in summary and "Configuration missing" not in summary:
+    _error_tokens = ("Failed", "Configuration missing", "LLM configuration not found",
+                      "Error", "not found")
+    if summary and not any(tok in summary for tok in _error_tokens):
         try:
             cache_file.write_text(summary, encoding="utf-8")
         except Exception:
@@ -958,7 +960,7 @@ def advise(profile: ProjectProfile,
 def _call_llm_for_advice(context: str, focus_class: str | None) -> str:
     """Call configured LLM with structured context. Returns '' on any failure."""
     try:
-        from .llm_provider import chat, load_config
+        from .llm_provider import load_config, chat
         cfg = load_config()
         if not cfg:
             return ""

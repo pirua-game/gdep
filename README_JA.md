@@ -91,7 +91,7 @@ gdep MCP:   直接依存 2 件 · 間接 200 件以上の UI クラス · アセ
 | `analyze_ue5_animation` | ABP 状態 + Montage + GAS Notify |
 | `analyze_ue5_blueprint_mapping` | C++ クラス → Blueprint 実装マッピング |
 
-> 詳細設定 → [gdep-cli/gdep-mcp/README_JA.md](./gdep-cli/gdep-mcp/README_JA.md)
+> 詳細設定 → [gdep-cli/gdep_mcp/README_JA.md](./gdep-cli/gdep_mcp/README_JA.md)
 
 ---
 
@@ -190,6 +190,6 @@ run.bat              # Windows — バックエンド + フロントエンドを
 
 ---
 
-*MCP サーバー → [gdep-cli/gdep-mcp/README_JA.md](./gdep-cli/gdep-mcp/README_JA.md)*
+*MCP サーバー → [gdep-cli/gdep_mcp/README_JA.md](./gdep-cli/gdep_mcp/README_JA.md)*
 *CI/CD 連携 → [docs/ci-integration_JA.md](./docs/ci-integration_JA.md)*
 *パフォーマンス → [docs/BENCHMARK_JA.md](./docs/BENCHMARK_JA.md)*

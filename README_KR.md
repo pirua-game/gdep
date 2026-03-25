@@ -92,7 +92,7 @@ gdep MCP:   직접 의존 2개 · 간접 200개 이상 UI 클래스 · 에셋: p
 | `analyze_ue5_animation` | ABP 상태 + Montage + GAS Notify |
 | `analyze_ue5_blueprint_mapping` | C++ 클래스 → Blueprint 구현체 매핑 |
 
-> 상세 설정 → [gdep-cli/gdep-mcp/README_KR.md](./gdep-cli/gdep-mcp/README_KR.md)
+> 상세 설정 → [gdep-cli/gdep_mcp/README_KR.md](./gdep-cli/gdep_mcp/README_KR.md)
 
 ---
 
@@ -353,7 +353,7 @@ dotnet publish -c Release --no-self-contained -o publish_dll
 
 ---
 
-*MCP 서버 설정 → [gdep-cli/gdep-mcp/README_KR.md](./gdep-cli/gdep-mcp/README_KR.md)*
+*MCP 서버 설정 → [gdep-cli/gdep_mcp/README_KR.md](./gdep-cli/gdep_mcp/README_KR.md)*
 *CI/CD 통합 → [docs/ci-integration_KR.md](./docs/ci-integration_KR.md)*
 *성능 벤치마크 → [docs/BENCHMARK_KR.md](./docs/BENCHMARK_KR.md)*
 *MCP 토큰·정확도 비교 → [docs/mcp-benchmark_KR.md](./docs/mcp-benchmark_KR.md)*

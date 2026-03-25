@@ -4,7 +4,7 @@
 Unity · Unreal Engine 5 · Cocos2d-x · .NET · C++ 프로젝트를 지원합니다.
 
 > **CLI 사용법 → [README.md](./README.md)**
-> **MCP 서버 설정 → [gdep-cli/gdep-mcp/README.md](./gdep-cli/gdep-mcp/README.md)**
+> **MCP 서버 설정 → [gdep-cli/gdep_mcp/README.md](./gdep-cli/gdep_mcp/README.md)**
 
 ---
 

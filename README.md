@@ -92,7 +92,7 @@ With gdep:     Direct deps: 2 · Indirect: 200+ UI classes · Asset: prefabs/UI/
 | `analyze_ue5_animation` | ABP states + Montage + GAS Notifies |
 | `analyze_ue5_blueprint_mapping` | C++ class → Blueprint impl mapping |
 
-> Full MCP setup → [gdep-cli/gdep-mcp/README.md](./gdep-cli/gdep-mcp/README.md)
+> Full MCP setup → [gdep-cli/gdep_mcp/README.md](./gdep-cli/gdep_mcp/README.md)
 
 ---
 
@@ -353,7 +353,7 @@ Detection priority: `$GDEP_DLL` env → `publish_dll/gdep.dll` → `publish/gdep
 
 ---
 
-*MCP Server → [gdep-cli/gdep-mcp/README.md](./gdep-cli/gdep-mcp/README.md)*
+*MCP Server → [gdep-cli/gdep_mcp/README.md](./gdep-cli/gdep_mcp/README.md)*
 *CI/CD Integration → [docs/ci-integration.md](./docs/ci-integration.md)*
 *Performance Benchmark → [docs/BENCHMARK.md](./docs/BENCHMARK.md)*
 *MCP Token & Accuracy → [docs/mcp-benchmark.md](./docs/mcp-benchmark.md)*

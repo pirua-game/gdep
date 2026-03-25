@@ -8,7 +8,7 @@ Supports Unity · Cocos2d-x · Unreal Engine 5 · .NET C# · Generic C++.
 [![PyPI](https://img.shields.io/pypi/v/gdep)](https://pypi.org/project/gdep/)
 
 **[GitHub](https://github.com/pirua-game/gdep)** ·
-**[MCP Setup](https://github.com/pirua-game/gdep/blob/main/gdep-cli/gdep-mcp/README.md)** ·
+**[MCP Setup](https://github.com/pirua-game/gdep/blob/main/gdep-cli/gdep_mcp/README.md)** ·
 **[CI/CD Integration](https://github.com/pirua-game/gdep/blob/main/docs/ci-integration.md)**
 
 **Read this in other languages:**
@@ -180,6 +180,6 @@ Detection priority: `$GDEP_DLL` env → `publish_dll/gdep.dll` → `publish/gdep
 ## 📚 More
 
 - [Full README & Workflows](https://github.com/pirua-game/gdep)
-- [MCP Server Setup](https://github.com/pirua-game/gdep/blob/main/gdep-cli/gdep-mcp/README.md)
+- [MCP Server Setup](https://github.com/pirua-game/gdep/blob/main/gdep-cli/gdep_mcp/README.md)
 - [CI/CD Integration](https://github.com/pirua-game/gdep/blob/main/docs/ci-integration.md)
 - [Performance Benchmark](https://github.com/pirua-game/gdep/blob/main/docs/BENCHMARK.md)

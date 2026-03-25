@@ -75,9 +75,12 @@ call the corresponding tool **immediately** without asking for confirmation.
 | "how does [feature] work?" / "trace [method]" | `trace_gameplay_flow(path, "Class", "Method")` |
 | "what calls X?" / "where is X called from?" | `trace_gameplay_flow(path, "X", ...)` |
 | "technical debt" / "codebase health" / "circular deps" / "dead code" | `inspect_architectural_health(path)` |
+| "architecture advice" / "what should I fix first?" / "prioritize improvements" | `get_architecture_advice(path)` |
 | "scan" / "overview" / "coupling" / "dependencies" | `execute_gdep_cli(["scan", path, "--circular", "--dead-code"])` |
-| "lint" / "anti-patterns" / "code smell" / "PR check" | `execute_gdep_cli(["lint", path])` |
-| "impact of [commit/PR]" / "what changed?" | `execute_gdep_cli(["diff", path, "--commit", "HEAD~1"])` |
+| "lint" / "anti-patterns" / "code smell" | `execute_gdep_cli(["lint", path])` |
+| "fix lint" / "lint fix suggestions" / "how to fix anti-patterns" | `suggest_lint_fixes(path)` |
+| "which tests to run?" / "test files for X" / "test coverage of X" | `suggest_test_scope(path, "X")` |
+| "what changed?" / "summarize this PR" / "diff summary" / "impact of commit" | `summarize_project_diff(path)` |
 | anything about a class you've never seen before | `explore_class_semantics(path, "ClassName")` **first** |
 
 ### Rule: before writing ANY code that touches an existing class
@@ -109,6 +112,27 @@ _TRIGGER_TABLE_UE5 = """\
 3. analyze_ue5_gas(path)                        # if GAS is used
 4. analyze_ue5_blueprint_mapping(path, "AMyChar") # find BP implementations
 5. trace_gameplay_flow(path, "AMyChar", "BeginPlay") # trace a specific flow
+```
+
+"""
+
+_TRIGGER_TABLE_AXMOL = """\
+### Axmol / Cocos2d-x-specific triggers
+
+| If the user says / asks … | Call this tool |
+|---------------------------|---------------|
+| "EventDispatcher" / "addEventListenerWith" / "Scheduler" / "scheduleUpdate" | `analyze_axmol_events(path)` |
+| "event bindings" / "callback map" / "who handles event X?" | `analyze_axmol_events(path)` |
+| "Axmol memory" / "retain/release" / "AXM-MEM" | `execute_gdep_cli(["lint", path])` |
+
+### Axmol recommended session flow
+
+```
+# New session on an Axmol / Cocos2d-x project
+1. get_project_context(path)                         # mandatory first call
+2. explore_class_semantics(path, "AppDelegate")      # understand entry point
+3. analyze_axmol_events(path)                        # reveal EventDispatcher/Scheduler bindings
+4. analyze_impact_and_risk(path, "ClassName")        # before any refactor
 ```
 
 """
@@ -182,6 +206,8 @@ def _build_agents_md(project_path: str) -> str:
         lines.append(_TRIGGER_TABLE_UE5)
     elif profile.kind == ProjectKind.UNITY:
         lines.append(_TRIGGER_TABLE_UNITY)
+    elif profile.kind == ProjectKind.CPP:
+        lines.append(_TRIGGER_TABLE_AXMOL)
 
     # 6. 도구 빠른 참조
     lines += _build_tool_reference(src_path, profile.kind)
@@ -205,8 +231,8 @@ def _append_scan_snapshot(lines: list[str], profile, src_path: str) -> None:
         lines += [
             "## Codebase Snapshot",
             "",
-            "| Metric | Value |",
-            "|--------|-------|",
+            f"| Metric | Value |",
+            f"|--------|-------|",
             f"| Files | **{summary.get('fileCount', '?')}** |",
             f"| Classes | **{summary.get('classCount', '?')}** |",
             f"| Circular deps | **{summary.get('cycleCount', 0)}** |",
@@ -288,15 +314,24 @@ def _build_tool_reference(src_path: str, kind: ProjectKind) -> list[str]:
         f'explore_class_semantics({p}, "<ClassName>")',
         f'analyze_impact_and_risk({p}, "<ClassName>")',
         f'inspect_architectural_health({p})',
+        f'get_architecture_advice({p})',
         f'execute_gdep_cli(["scan", {p}, "--circular", "--dead-code", "--top", "20"])',
+        "",
+        "# ── Lint & fixes ──────────────────────────────────────",
         f'execute_gdep_cli(["lint", {p}])',
+        f'suggest_lint_fixes({p})',
         "",
         "# ── Flow tracing ──────────────────────────────────────",
         f'trace_gameplay_flow({p}, "<Class>", "<Method>")',
         f'trace_gameplay_flow({p}, "<Class>", "<Method>", depth=6)',
         "",
+        "# ── Test scope ────────────────────────────────────────",
+        f'suggest_test_scope({p}, "<ClassName>")',
+        f'execute_gdep_cli(["test-scope", {p}, "<ClassName>", "--format", "json"])',
+        "",
         "# ── Impact & diff ─────────────────────────────────────",
-        f'execute_gdep_cli(["impact", {p}, "<ClassName>", "--depth", "5"])',
+        f'analyze_impact_and_risk({p}, "<ClassName>")',
+        f'summarize_project_diff({p})',
         f'execute_gdep_cli(["diff",   {p}, "--commit", "HEAD~1", "--fail-on-cycles"])',
     ]
 
@@ -320,6 +355,12 @@ def _build_tool_reference(src_path: str, kind: ProjectKind) -> list[str]:
             f'find_unity_event_bindings({p}, method_name="<MethodName>")',
             f'analyze_unity_animator({p})',
             f'execute_gdep_cli(["scan", {p}, "--include-refs"])',
+        ]
+    elif kind == ProjectKind.CPP:
+        lines += [
+            "",
+            "# ── Axmol / C++ specific ──────────────────────────────",
+            f'analyze_axmol_events({p})',
         ]
 
     lines += [

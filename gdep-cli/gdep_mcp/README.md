@@ -45,7 +45,7 @@ pip install gdep "mcp[cli]"
   "mcpServers": {
     "gdep": {
       "command": "/path/to/gdep-cli/.venv/bin/python",
-      "args": ["/path/to/gdep-cli/gdep-mcp/server.py"],
+      "args": ["/path/to/gdep-cli/gdep_mcp/server.py"],
       "cwd": "/path/to/gdep-cli"
     }
   }
@@ -102,10 +102,10 @@ pip install gdep "mcp[cli]"
 ## 💬 Usage Examples with AI
 
 ```
-"What classes are affected if I modify CombatCore?"
+"What classes are affected if I modify BattleCore?"
 → analyze_impact_and_risk
 
-"How does the ExecuteAction method actually work?"
+"How does the PlayHand method actually work?"
 → trace_gameplay_flow
 
 "What's the tech debt level of this project?"

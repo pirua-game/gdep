@@ -92,7 +92,7 @@ gdep MCP:   直接依赖 2 个 · 间接 200+ UI 类 · 资源: prefabs/UI/comba
 | `analyze_ue5_animation` | ABP 状态 + Montage + GAS Notify |
 | `analyze_ue5_blueprint_mapping` | C++ 类 → Blueprint 实现映射 |
 
-> 详细配置 → [gdep-cli/gdep-mcp/README_ZH.md](./gdep-cli/gdep-mcp/README_ZH.md)
+> 详细配置 → [gdep-cli/gdep_mcp/README_ZH.md](./gdep-cli/gdep_mcp/README_ZH.md)
 
 ---
 
@@ -191,6 +191,6 @@ run.bat              # Windows — 自动在两个独立终端中启动后端 + 
 
 ---
 
-*MCP 服务器 → [gdep-cli/gdep-mcp/README_ZH.md](./gdep-cli/gdep-mcp/README_ZH.md)*
+*MCP 服务器 → [gdep-cli/gdep_mcp/README_ZH.md](./gdep-cli/gdep_mcp/README_ZH.md)*
 *CI/CD 集成 → [docs/ci-integration_ZH.md](./docs/ci-integration_ZH.md)*
 *性能基准 → [docs/BENCHMARK_ZH.md](./docs/BENCHMARK_ZH.md)*

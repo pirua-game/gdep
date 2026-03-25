@@ -271,9 +271,48 @@ PROVIDER_INFO = {
 }
 
 
+def _configure_interactively() -> "LLMConfig | None":
+    """Prompt the user for LLM provider config when running in an interactive terminal."""
+    import sys
+    if not sys.stdin.isatty():
+        return None
+
+    print("\n── LLM Not Configured ──────────────────────────────────────")
+    print("gdep needs an LLM provider to generate class summaries.")
+    print("Available providers: ollama (local), openai, gemini, claude")
+    print()
+
+    provider = input("Provider [ollama]: ").strip() or "ollama"
+    if provider not in PROVIDER_INFO:
+        print(f"  Unknown provider '{provider}'. Falling back to ollama.")
+        provider = "ollama"
+
+    info = PROVIDER_INFO[provider]
+    default_model = info["default_models"][0]
+    model = input(f"Model [{default_model}]: ").strip() or default_model
+
+    api_key = ""
+    if info["needs_key"]:
+        api_key = input(f"API Key ({info['key_placeholder']}): ").strip()
+
+    base_url = "http://localhost:11434"
+    if provider == "ollama":
+        custom_url = input(f"Base URL [{base_url}]: ").strip()
+        if custom_url:
+            base_url = custom_url
+
+    config = LLMConfig(provider=provider, model=model, api_key=api_key, base_url=base_url)
+    save_config(config)
+    print(f"\n✓  LLM config saved [{provider} / {model}]")
+    print("────────────────────────────────────────────────────────────\n")
+    return config
+
+
 def summarize_class(class_name: str, context: str) -> str:
     """Generates a 3-line summary based on class information."""
     config = load_config()
+    if not config:
+        config = _configure_interactively()
     if not config:
         return "LLM configuration not found. Please set it using the 'gdep config llm' command."
 
