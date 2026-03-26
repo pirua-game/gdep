@@ -67,8 +67,14 @@ _VAR_TYPES = (
 
 _SCRIPT_PAT         = re.compile(rb'/Script/(\w+)\.(\w+)')
 _C_CLASS_PAT        = re.compile(rb'(?<!\w)([A-Z][A-Za-z_0-9]{2,}_C)\x00')
+# UE5 uasset에는 두 가지 NativeParentClass 포맷이 존재:
+#   Format A (5.3+): NativeParentClass<bytes>/Script/CoreUObject.Class'/Script/Module.ClassName'
+#   Format B (older): NativeParentClass<bytes>Class'/Script/Module.ClassName'
+# 공통점: 마지막 /Script/Module.ClassName' 가 실제 C++ 부모.
+# (?:/Script/\w+\.)? 로 앞의 타입 참조(/Script/CoreUObject.)를 선택적으로 skip.
 _NATIVE_PARENT_PAT  = re.compile(
-    rb'NativeParentClass[\x00-\x3f]{1,60}/Script/(\w+)\.(\w+)', re.DOTALL)
+    rb"NativeParentClass[\x00-\x3f]{1,80}(?:/Script/\w+\.)?Class'/Script/(\w+)\.(\w+)'",
+    re.DOTALL)
 _GAME_PATH_PAT      = re.compile(rb'(/Game/[\w/._-]{4,200})')
 _GTAG_PAT           = re.compile(
     rb'"([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+){1,6})"')
@@ -214,15 +220,19 @@ def _parse_asset(asset_path: Path, content_root: Path,
     cpp_module = ""
     nm = _NATIVE_PARENT_PAT.search(data)
     if nm:
-        cpp_module = nm.group(1).decode('ascii', 'ignore')
-        cpp_parent = nm.group(2).decode('ascii', 'ignore')
+        _mod = nm.group(1).decode('ascii', 'ignore')
+        _cls = nm.group(2).decode('ascii', 'ignore')
+        # 엔진 모듈(CoreUObject.Object 등)이 아닌 경우만 사용
+        if _mod not in _ENGINE_MODULES and _cls not in ('Class', 'Object'):
+            cpp_module = _mod
+            cpp_parent = _cls
 
     # Fallback: first /Script/OurModule.ClassName reference
     if not cpp_parent:
         for sm in _SCRIPT_PAT.finditer(data):
             mod = sm.group(1).decode('ascii', 'ignore')
             cls = sm.group(2).decode('ascii', 'ignore')
-            if mod == module_name and not cls.endswith('_C') and cls != 'Class':
+            if mod == module_name and not cls.endswith('_C') and cls not in ('Class', 'Object'):
                 cpp_parent = cls
                 cpp_module = mod
                 break
