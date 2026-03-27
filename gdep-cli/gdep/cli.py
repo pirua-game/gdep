@@ -1092,6 +1092,9 @@ def init(path, force):
         agents_md = write_agents_md(path, force=force)
         content = agents_md.read_text(encoding="utf-8")
         click.secho(f"\n[OK] Created: {agents_md}", fg="green")
+        help_md = agents_md.parent / "HELP.md"
+        if help_md.exists():
+            click.secho(f"[OK] Created: {help_md}", fg="green")
         click.echo(f"  {len(content.splitlines())} lines written.")
         click.echo()
         click.echo("  AI Agents (Claude Desktop, Cursor, Gemini CLI) will now automatically")
