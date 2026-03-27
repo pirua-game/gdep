@@ -208,12 +208,28 @@ def scan(src: str, top: int = 20, circular: bool = True, dead_code: bool = False
             from . import ue5_blueprint_refs
             ref_map = ue5_blueprint_refs.build_ref_map(src)
             if ref_map:
+                # Boost coupling score for classes referenced from BP/ABP/Montage/.uasset
                 for item in active_coupling:
                     engine_ref = ref_map.get(item["name"])
                     if engine_ref and engine_ref.total > 0:
                         item["score"] += engine_ref.total
                         item["engine_ref"] = engine_ref.total
                 active_coupling.sort(key=lambda x: x["score"], reverse=True)
+                # Filter dead_nodes: a class referenced from any .uasset is NOT dead code
+                filtered_dead = []
+                for node in dead_nodes:
+                    engine_ref = ref_map.get(node["name"])
+                    if engine_ref and engine_ref.total > 0:
+                        # Has BP/ABP/Montage/GAS asset references — move to active coupling
+                        node["score"] = engine_ref.total
+                        node["engine_ref"] = engine_ref.total
+                        active_coupling.append(node)
+                    else:
+                        filtered_dead.append(node)
+                active_coupling.sort(key=lambda x: x["score"], reverse=True)
+                dead_nodes = filtered_dead
+                data["deadNodes"] = dead_nodes
+                data["summary"]["deadCount"] = len(dead_nodes)
                 data["summary"]["engineRefApplied"] = True
 
         if fmt == "json":

@@ -30,9 +30,15 @@ _PREAMBLE = """\
 
 ## Project Analysis Tools
 
-This project uses **gdep MCP** for codebase analysis.
-gdep is a static analyser that understands game engine internals:
-prefab bindings, Blueprint↔C++ bridges, GAS flows, Animator state machines, etc.
+gdep is a **static project structure analyser** — think of it as a map and
+reconnaissance drone for your codebase. It scans source files and engine assets
+to tell you *what exists* and *how things connect*, so the AI agent doesn't
+have to read every file.
+
+- **What gdep knows:** classes, dependencies, call graphs, Blueprint↔C++ bridges,
+  GAS flows, Animator state machines, engine asset references (prefabs, Blueprints, .uasset)
+- **What gdep does NOT know:** runtime behavior, Blueprint visual-script internals,
+  GameplayEffect numerical values, or "why does this crash"
 
 ### Available capabilities
 
@@ -53,6 +59,11 @@ prefab bindings, Blueprint↔C++ bridges, GAS flows, Animator state machines, et
 
 4. **For a complete list of all tools and parameters,
    read `.gdep/HELP.md`** (generated alongside this file).
+
+5. **Cache & freshness:** Individual tool results auto-invalidate when source files
+   (.h/.cpp/.cs) or assets (.uasset) change. However, **this AGENTS.md file is a
+   static snapshot** — regenerate it after major structural changes (new classes,
+   new Blueprints, GAS tag changes): `gdep init <project_path> --force`
 
 """
 
@@ -568,6 +579,11 @@ def _append_scan_snapshot(lines: list[str], profile, src_path: str) -> None:
             f"| Classes | **{summary.get('classCount', '?')}** |",
             f"| Circular deps | **{summary.get('cycleCount', 0)}** |",
             f"| Dead code candidates | **{summary.get('deadCount', 0)}** |",
+            "",
+            "> **Dead code** = classes with in-degree 0 (no other class references them in code).",
+            "> Unity: prefab/scene asset references are also checked — a class used only from a prefab is NOT dead code.",
+            "> UE5: Blueprint, ABP, Montage, and GAS .uasset references are also checked — a class used only from a .uasset is NOT dead code.",
+            "> Generic C++: only source-code references are checked.",
             "",
         ]
         if coupling:
