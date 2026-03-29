@@ -8,7 +8,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { useApp } from '../store'
 // t() is accessed via useApp()
-import { flowApi, llmApi, type FlowNode, type FlowEdge } from '../api/client'
+import { flowApi, llmApi, analysisNewApi, type FlowNode, type FlowEdge } from '../api/client'
 
 const COLORS = {
   entry:    '#1D9E75',
@@ -156,6 +156,19 @@ export default function FlowGraph() {
   const [llmResult,  setLlmResult]  = useState('')
   const [llmLoading, setLlmLoading] = useState(false)
   const [drilling,   setDrilling]   = useState(false)
+
+  // ── 역호출 추적 ──
+  const [callersResult,  setCallersResult]  = useState('')
+  const [callersLoading, setCallersLoading] = useState(false)
+
+  // ── 호출 경로 탐색 ──
+  const [showPathPanel, setShowPathPanel] = useState(false)
+  const [pathFromCls,   setPathFromCls]   = useState('')
+  const [pathFromMethod, setPathFromMethod] = useState('')
+  const [pathToCls,     setPathToCls]     = useState('')
+  const [pathToMethod,  setPathToMethod]  = useState('')
+  const [pathResult,    setPathResult]    = useState('')
+  const [pathLoading,   setPathLoading]   = useState(false)
 
   // ★ 드래그 여부 추적 — onNodeDragStart/Stop 사용
   const isDragging = useRef(false)
@@ -305,6 +318,13 @@ export default function FlowGraph() {
           className="btn-secondary text-sm shrink-0 disabled:opacity-50">
           {llmLoading ? t('llm_analyzing') : t('llm_interpret')}
         </button>
+        <button onClick={() => setShowPathPanel(v => !v)}
+          className={`text-sm shrink-0 px-3 py-1.5 rounded border transition-colors
+            ${showPathPanel
+              ? 'bg-indigo-900 border-indigo-600 text-indigo-200'
+              : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700'}`}>
+          {t('flow_find_path')}
+        </button>
       </div>
 
       {/* 선택 노드 액션 바 */}
@@ -332,6 +352,24 @@ export default function FlowGraph() {
               {selFn.isLeaf ? t('leaf_no_drilldown') : t('no_drilldown')}
             </span>
           )}
+
+          {/* 역호출 추적 버튼 */}
+          <button
+            onClick={async () => {
+              if (!selFn) return
+              setCallersLoading(true); setCallersResult('')
+              try {
+                const res = await analysisNewApi.methodCallers(scriptsPath, selFn.class, selFn.method)
+                setCallersResult(res)
+              } catch (e: any) {
+                setCallersResult(`Error: ${e?.response?.data?.detail ?? e?.message ?? e}`)
+              } finally { setCallersLoading(false) }
+            }}
+            disabled={callersLoading}
+            className="shrink-0 px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600
+                       text-white text-sm border border-indigo-600 transition-colors disabled:opacity-50">
+            {callersLoading ? t('analyzing') : t('flow_callers_btn')}
+          </button>
 
           <button onClick={() => setSelectedNode(null)}
             className="shrink-0 text-sm text-gray-500 hover:text-gray-300 px-2">
@@ -378,6 +416,63 @@ export default function FlowGraph() {
               className="text-sm text-gray-500 hover:text-gray-300">{t('close_btn')}</button>
           </div>
           <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{llmResult}</p>
+        </div>
+      )}
+
+      {/* 역호출 결과 */}
+      {callersResult && (
+        <div className="border-t border-gray-800 p-4 max-h-52 overflow-y-auto shrink-0 bg-gray-950">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-indigo-400">{t('flow_reverse_callers')}</h3>
+            <button onClick={() => setCallersResult('')}
+              className="text-sm text-gray-500 hover:text-gray-300">{t('close_btn')}</button>
+          </div>
+          <pre className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed font-mono">{callersResult}</pre>
+        </div>
+      )}
+
+      {/* 경로 탐색 패널 */}
+      {showPathPanel && (
+        <div className="border-t border-gray-800 p-4 shrink-0 bg-gray-950">
+          <div className="flex items-center gap-2 mb-2">
+            <h3 className="text-sm font-semibold text-indigo-400">{t('flow_find_path')}</h3>
+            <p className="text-xs text-gray-500">{t('flow_path_desc')}</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-gray-500">{t('flow_from')}:</span>
+            <input className="input text-sm w-36" placeholder={t('flow_class_ph')}
+              value={pathFromCls} onChange={e => setPathFromCls(e.target.value)} />
+            <input className="input text-sm w-36" placeholder={t('flow_method_ph')}
+              value={pathFromMethod} onChange={e => setPathFromMethod(e.target.value)} />
+            <span className="text-gray-600">→</span>
+            <span className="text-xs text-gray-500">{t('flow_to')}:</span>
+            <input className="input text-sm w-36" placeholder={t('flow_class_ph')}
+              value={pathToCls} onChange={e => setPathToCls(e.target.value)} />
+            <input className="input text-sm w-36" placeholder={t('flow_method_ph')}
+              value={pathToMethod} onChange={e => setPathToMethod(e.target.value)} />
+            <button
+              onClick={async () => {
+                if (!pathFromCls || !pathFromMethod || !pathToCls || !pathToMethod) return
+                setPathLoading(true); setPathResult('')
+                try {
+                  const res = await analysisNewApi.callPath(
+                    scriptsPath, pathFromCls, pathFromMethod, pathToCls, pathToMethod)
+                  setPathResult(res)
+                } catch (e: any) {
+                  setPathResult(`Error: ${e?.response?.data?.detail ?? e?.message ?? e}`)
+                } finally { setPathLoading(false) }
+              }}
+              disabled={pathLoading || !pathFromCls || !pathFromMethod || !pathToCls || !pathToMethod}
+              className="btn-primary text-sm px-4 py-1.5 disabled:opacity-50">
+              {pathLoading ? t('analyzing') : t('flow_find_btn')}
+            </button>
+          </div>
+          {pathResult && (
+            <pre className="mt-3 text-sm text-gray-300 whitespace-pre-wrap font-mono
+                            border border-gray-800 rounded p-3 bg-gray-900/50 max-h-40 overflow-y-auto">
+              {pathResult}
+            </pre>
+          )}
         </div>
       )}
 

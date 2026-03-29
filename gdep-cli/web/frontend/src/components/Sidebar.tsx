@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
-import { RefreshCw, ChevronDown, Info, BookOpen, FilePlus } from 'lucide-react'
+import { RefreshCw, ChevronDown, Info, BookOpen, FilePlus, FolderOpen, ArrowUp, Folder } from 'lucide-react'
 import { useApp, type EngineProfile } from '../store'
-import { projectApi, llmApi, type ProjectContextResult } from '../api/client'
+import { projectApi, llmApi, type ProjectContextResult, type BrowseResult } from '../api/client'
 
 // ── 툴팁 (fixed 포지셔닝으로 클리핑 방지) ────────────────────
 function Tip({ text, children }: { text: string; children: ReactNode }) {
@@ -81,6 +81,13 @@ export default function Sidebar() {
   const [contextLoading,setContextLoading]= useState(false)
   const [initLoading,   setInitLoading]   = useState(false)
   const [initMsg,       setInitMsg]       = useState('')
+  // Folder picker
+  const [pickerOpen,    setPickerOpen]    = useState(false)
+  const [browsePath,    setBrowsePath]    = useState('')
+  const [browseItems,   setBrowseItems]   = useState<string[]>([])
+  const [browseParent,  setBrowseParent]  = useState('')
+  const [browseRoot,    setBrowseRoot]    = useState(false)
+  const [browseLoading, setBrowseLoading] = useState(false)
 
   const ENGINE_PROFILES: { value: EngineProfile; label: string }[] = [
     { value: 'auto',     label: t('engine_auto') },
@@ -108,6 +115,18 @@ export default function Sidebar() {
 
   useEffect(() => { setFocusClasses(focusInput.split(',').map(s => s.trim()).filter(Boolean)) }, [focusInput])
   useEffect(() => { setCustomBaseClasses(customInput.split(',').map(s => s.trim()).filter(Boolean)) }, [customInput])
+
+  async function openBrowser(path = '') {
+    setBrowseLoading(true)
+    try {
+      const r = await projectApi.browse(path)
+      setBrowsePath(path)
+      setBrowseItems(r.dirs)
+      setBrowseParent(r.parent)
+      setBrowseRoot(r.is_root)
+    } catch { setBrowseItems([]) }
+    finally { setBrowseLoading(false) }
+  }
 
   async function applyPath(path: string) {
     if (!path.trim()) return
@@ -153,6 +172,11 @@ export default function Sidebar() {
               onChange={e => setInputPath(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && applyPath(inputPath)}
               placeholder={t('scripts_path_placeholder')} />
+            <button className="btn-secondary px-2 shrink-0"
+              title={t('folder_picker_tip')}
+              onClick={() => { setPickerOpen(true); openBrowser(inputPath || '') }}>
+              <FolderOpen size={13} />
+            </button>
             <button className="btn-secondary px-2 shrink-0"
               onClick={() => applyPath(inputPath)}>
               <RefreshCw size={13} className={detecting ? 'animate-spin' : ''} />
@@ -375,6 +399,86 @@ export default function Sidebar() {
               </p>
             </div>
           )}
+        </div>
+      </div>
+    )}
+
+    {/* ── 폴더 선택기 모달 ── */}
+    {pickerOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl
+                        w-[480px] max-h-[70vh] flex flex-col">
+          {/* 헤더 */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 shrink-0">
+            <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
+              <FolderOpen size={14} className="text-emerald-400"/>
+              {t('folder_picker_title')}
+            </h3>
+            <button onClick={() => setPickerOpen(false)}
+              className="text-gray-400 hover:text-gray-200 text-lg leading-none px-1">✕</button>
+          </div>
+
+          {/* 현재 경로 + 상위 이동 */}
+          <div className="px-4 py-2 border-b border-gray-800 flex items-center gap-2 shrink-0">
+            {!browseRoot && (
+              <button onClick={() => openBrowser(browseParent)}
+                className="text-xs px-2 py-1 rounded bg-gray-800 hover:bg-gray-700
+                           text-gray-300 border border-gray-700 flex items-center gap-1 shrink-0">
+                <ArrowUp size={11}/> {t('folder_picker_up')}
+              </button>
+            )}
+            <p className="text-xs text-gray-400 truncate flex-1" title={browsePath}>
+              {browsePath || '/'}
+            </p>
+          </div>
+
+          {/* 디렉토리 목록 */}
+          <div className="flex-1 overflow-y-auto p-2">
+            {browseLoading ? (
+              <p className="text-xs text-gray-500 text-center py-4 animate-pulse">Loading…</p>
+            ) : browseItems.length === 0 ? (
+              <p className="text-xs text-gray-500 text-center py-4">{t('folder_picker_empty')}</p>
+            ) : (
+              <div className="space-y-0.5">
+                {browseItems.map(dir => {
+                  const name = dir.split(/[\\/]/).filter(Boolean).pop() || dir
+                  return (
+                    <button key={dir}
+                      onClick={() => openBrowser(dir)}
+                      className="w-full text-left flex items-center gap-2 px-3 py-1.5 rounded
+                                 hover:bg-gray-800 text-gray-300 text-xs transition-colors"
+                      title={dir}>
+                      <Folder size={13} className="text-yellow-500 shrink-0"/>
+                      <span className="truncate">{name}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 푸터 */}
+          <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-700 shrink-0">
+            <button onClick={() => setPickerOpen(false)}
+              className="text-xs px-3 py-1.5 rounded border border-gray-600 text-gray-400
+                         hover:bg-gray-800 transition-colors">
+              {t('folder_picker_cancel')}
+            </button>
+            <button
+              onClick={() => {
+                if (browsePath) {
+                  setInputPath(browsePath)
+                  applyPath(browsePath)
+                }
+                setPickerOpen(false)
+              }}
+              disabled={!browsePath}
+              className="text-xs px-3 py-1.5 rounded bg-emerald-800 hover:bg-emerald-700
+                         text-emerald-200 border border-emerald-600 transition-colors
+                         disabled:opacity-50">
+              {t('folder_picker_select')}
+            </button>
+          </div>
         </div>
       </div>
     )}

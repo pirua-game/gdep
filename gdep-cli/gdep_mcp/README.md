@@ -57,7 +57,7 @@ pip install gdep "mcp[cli]"
 
 ---
 
-## 🛠 Available Tools (21)
+## 🛠 Available Tools (26)
 
 ### Context Tool — call first at session start
 
@@ -65,21 +65,26 @@ pip install gdep "mcp[cli]"
 |------|-------------|
 | `get_project_context` | Full project overview. Reads `.gdep/AGENTS.md` if present, otherwise generates on-the-fly |
 
-### High-level Intent Tools (11)
+### High-level Intent Tools (16)
 
 | Tool | Description |
 |------|-------------|
 | `analyze_impact_and_risk` | Impact scope + lint before modifying a class or method. `method_name=` for method-level callers; `detail_level="summary"` for a quick count; `query=` to filter results |
-| `explain_method_logic` | Summarize internal control flow of a single method — Guard / Branch / Loop / Always in 5–10 lines. Supports C++ namespace-style functions |
+| `explain_method_logic` | Summarize internal control flow of a single method — Guard / Branch / Loop / Always in 5–10 lines. Supports C++ namespace-style functions. `include_source=True` appends method body |
 | `trace_gameplay_flow` | Method call chain + source code. `summary=True` for compact 2-level tree (saves tokens) |
 | `inspect_architectural_health` | Coupling / circular deps / dead code / anti-patterns |
-| `explore_class_semantics` | Class structure + AI 3-line summary |
+| `explore_class_semantics` | Class structure + AI 3-line summary. Default `compact=True` limits output to ~4–8 KB; `include_source=True` appends source code |
 | `suggest_test_scope` | Test files to run after modifying a class (pattern-based, CI-ready JSON output) |
 | `suggest_lint_fixes` | Lint issues with concrete code fix suggestions (dry-run, no file changes) |
 | `summarize_project_diff` | Architecture-level summary of a git diff — new cycles, high-coupling changes |
 | `get_architecture_advice` | Full project scan + lint + impact → structured report or LLM-powered advice |
 | `find_method_callers` | Reverse call graph — all methods that call a specific method |
 | `find_call_path` | Shortest call path between two methods (A → B, **C#/Unity only**) |
+| `find_class_hierarchy` | Full inheritance tree — ancestors (parent chain) + descendants (subclass tree). `direction=up/down/both`, `max_depth=` |
+| `read_class_source` | Return actual source code of a class or a specific method. `method_name=` to return only that method's body (token-efficient); `max_chars=` to control size |
+| `find_unused_assets` | Unreferenced assets — Unity GUID scan / UE5 binary path reference scan. Returns asset paths safe to delete |
+| `query_project_api` | Search project API by class/method/property name with relevance scoring. `scope=all/classes/methods/properties` |
+| `detect_patterns` | Detect design patterns in the codebase (Singleton, Subsystem, GAS, Component, Observer, etc.) |
 
 ### Raw CLI Access (1)
 
@@ -162,6 +167,18 @@ pip install gdep "mcp[cli]"
 
 "Find the Blueprint that inherits ARGameplayAbility_Dash"
 → analyze_ue5_blueprint_mapping(path, "ARGameplayAbility_Dash")
+
+"What does APlayerCharacter inherit from? Who extends it?"
+→ find_class_hierarchy(path, "APlayerCharacter")
+
+"Which assets are unused and safe to delete?"
+→ find_unused_assets(path)
+
+"Find all methods related to 'Health' in this project"
+→ query_project_api(path, "Health")
+
+"What architectural patterns does this codebase use?"
+→ detect_patterns(path)
 ```
 
 ---

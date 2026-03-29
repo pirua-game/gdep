@@ -292,8 +292,42 @@ def scan(profile: ProjectProfile, circular: bool = False,
     # 2. Process C# (Unity/Dotnet)
     src  = _src(profile)
 
+    # ── dot/mermaid: get JSON data then render graph in Python ──
+    # (C# binary's scan does not support --format dot/mermaid natively)
+    if fmt in ("dot", "mermaid"):
+        dot_cache = _load_cs_cache(profile) if not include_refs and not deep else None
+        if dot_cache is None:
+            json_args = ["scan", src, "--top", "9999", "--format", "json"]
+            if circular:   json_args.append("--circular")
+            if dead_code:  json_args.append("--dead-code")
+            if deep:       json_args.append("--deep")
+            if namespace:  json_args += ["--namespace", namespace]
+            if ignore:
+                for p in ignore: json_args += ["--ignore", p]
+            json_result = run(json_args)
+            if not json_result.ok or not json_result.data:
+                return json_result
+            dot_cache = json_result.data
+            if not include_refs and not deep:
+                _save_cs_cache(profile, dot_cache)
+        coupling = dot_cache.get("coupling", [])
+        if fmt == "dot":
+            lines = ['digraph coupling {', '  rankdir=LR;', '  node [shape=box];']
+            for item in coupling:
+                label = f"{item['name']}\\n(score: {item['score']})"
+                lines.append(f'  "{item["name"]}" [label="{label}"];')
+            lines.append('}')
+            return RunResult(ok=True, stdout="\n".join(lines), stderr="", data=dot_cache)
+        else:  # mermaid
+            lines = ['graph TD']
+            for item in coupling:
+                safe = item['name'].replace('-', '_')
+                lines.append(f'  {safe}["{item["name"]} ({item["score"]})"]')
+            return RunResult(ok=True, stdout="\n".join(lines), stderr="", data=dot_cache)
+
     # ── mtime-based disk cache for C# scan (skips dotnet subprocess) ──
-    if not include_refs and fmt != "json":
+    # Only use cache for non-deep scans; --deep may produce different results
+    if not include_refs and fmt != "json" and not deep:
         cached = _load_cs_cache(profile)
         if cached:
             # Rebuild console output from cached data
@@ -314,8 +348,8 @@ def scan(profile: ProjectProfile, circular: bool = False,
 
     result = run(args)
 
-    # Save scan result to disk cache (only for basic scan without refs)
-    if not include_refs and result.ok and result.data:
+    # Save scan result to disk cache (only for basic non-deep scan without refs)
+    if not include_refs and not deep and result.ok and result.data:
         _save_cs_cache(profile, result.data)
 
     # If caller wants console output, reconstruct it from JSON data
@@ -452,10 +486,14 @@ def describe(profile: ProjectProfile, class_name: str,
     # 2. LLM Summary processing (supported for console output)
     if summarize and fmt == "console":
         summary = _get_class_summary(profile, class_name, result.stdout, refresh)
-        if summary:
+        _error_tokens = ("Failed", "Configuration missing", "LLM configuration not found",
+                         "Error", "not found")
+        if summary and not any(tok in summary for tok in _error_tokens):
             # Prepend summary to the output
             header = f"\n[bold cyan]── Semantic Summary (AI) ──────────────────────────[/]\n{summary}\n"
             result.stdout = header + result.stdout
+        elif summary:
+            result.stdout += f"\n\n[yellow]Note: {summary}[/]"
 
     return result
 
@@ -474,8 +512,11 @@ def _get_class_summary(profile: ProjectProfile, class_name: str,
             pass
 
     # Call LLM
-    from .llm_provider import summarize_class
-    summary = summarize_class(class_name, context)
+    try:
+        from .llm_provider import summarize_class
+        summary = summarize_class(class_name, context)
+    except Exception:
+        return None
 
     _error_tokens = ("Failed", "Configuration missing", "LLM configuration not found",
                       "Error", "not found")
@@ -554,6 +595,287 @@ def path(profile: ProjectProfile, from_class: str, from_method: str,
                 "--from", f"{from_class}.{from_method}",
                 "--to", f"{to_class}.{to_method}",
                 "--depth", str(depth)])
+
+
+# ── Class Hierarchy ───────────────────────────────────────────
+
+def hierarchy(profile: ProjectProfile, class_name: str,
+              direction: str = "both",
+              max_depth: int = 10) -> RunResult:
+    """Build the inheritance hierarchy tree for *class_name*.
+
+    direction: "up" (ancestors), "down" (descendants), "both".
+    Works for C++ (UE5/generic) and C# (Unity/.NET) projects.
+    """
+    if _is_cpp(profile):
+        return _hierarchy_cpp(profile, class_name, direction, max_depth)
+    return _hierarchy_cs(profile, class_name, direction, max_depth)
+
+
+def _hierarchy_cpp(profile: ProjectProfile, class_name: str,
+                   direction: str, max_depth: int) -> RunResult:
+    """Hierarchy for C++/UE5 projects — uses Tree-sitter parsed data."""
+    try:
+        src = _src(profile)
+        if profile.kind == ProjectKind.UNREAL:
+            from . import ue5_runner
+            proj = ue5_runner._get_project(src)
+        else:
+            from . import cpp_runner
+            proj = cpp_runner._get_project(src)
+
+        all_items = {**proj.classes, **proj.structs}
+
+        # Resolve class name (try as-is, normalized, with UE prefixes)
+        cls = all_items.get(class_name)
+        if not cls and profile.kind == ProjectKind.UNREAL:
+            from .ue5_ts_parser import _normalize_cpp_type
+            norm = _normalize_cpp_type(class_name)
+            cls = all_items.get(norm)
+            if not cls:
+                for prefix in ('U', 'A', 'F', 'I'):
+                    cls = all_items.get(prefix + class_name) or all_items.get(prefix + norm)
+                    if cls:
+                        break
+        if not cls:
+            # Case-insensitive fallback
+            for k, v in all_items.items():
+                if k.lower() == class_name.lower():
+                    cls = v
+                    break
+        if not cls:
+            return RunResult(ok=False, stdout="",
+                             stderr=f"Class '{class_name}' not found in project.")
+
+        resolved_name = cls.name
+        lines: list[str] = [f"── Inheritance Hierarchy: {resolved_name} ──"]
+
+        # ── Ancestors (upward) ──
+        if direction in ("up", "both"):
+            lines.append("")
+            lines.append("▲ Ancestors (base classes):")
+            chain = _walk_ancestors(all_items, resolved_name, max_depth)
+            if not chain:
+                lines.append("  (no base class)")
+            else:
+                for i, (name, kind_tag, file_path, interfaces) in enumerate(chain):
+                    indent = "  " + "  " * i
+                    ftag = f"  ({Path(file_path).name})" if file_path else ""
+                    ktag = f" [{kind_tag}]" if kind_tag else ""
+                    lines.append(f"{indent}↑ {name}{ktag}{ftag}")
+                    for iface in interfaces:
+                        lines.append(f"{indent}  ├ implements: {iface}")
+
+        # ── Descendants (downward) ──
+        if direction in ("down", "both"):
+            lines.append("")
+            lines.append("▼ Descendants (derived classes):")
+            children = _find_descendants(all_items, resolved_name, max_depth)
+            if not children:
+                lines.append("  (no derived classes found)")
+            else:
+                _format_descendant_tree(lines, children, indent=2)
+
+        return RunResult(ok=True, stdout="\n".join(lines), stderr="")
+    except Exception as e:
+        return RunResult(ok=False, stdout="", stderr=str(e))
+
+
+def _walk_ancestors(all_items: dict, class_name: str,
+                    max_depth: int) -> list[tuple[str, str, str, list[str]]]:
+    """Walk up the primary inheritance chain.
+
+    Returns list of (name, kind_tag, file_path, interfaces) tuples.
+    """
+    result: list[tuple[str, str, str, list[str]]] = []
+    current = class_name
+    visited: set[str] = {current}
+    for _ in range(max_depth):
+        cls = all_items.get(current)
+        if cls is None or not cls.bases:
+            break
+        primary = cls.bases[0]
+        interfaces = cls.bases[1:] if len(cls.bases) > 1 else []
+        parent = all_items.get(primary)
+        kind_tag = ""
+        file_path = ""
+        if parent:
+            kind_tag = getattr(parent, 'kind', '')
+            file_path = getattr(parent, 'source_file', '')
+        result.append((primary, kind_tag, file_path, interfaces))
+        if primary in visited:
+            break
+        visited.add(primary)
+        current = primary
+    return result
+
+
+def _find_descendants(all_items: dict, class_name: str,
+                      max_depth: int, _depth: int = 0) -> list[dict]:
+    """Recursively find all classes that inherit from class_name."""
+    if _depth >= max_depth:
+        return []
+    children: list[dict] = []
+    for name, cls in all_items.items():
+        if class_name in getattr(cls, 'bases', []):
+            child_entry = {
+                "name": name,
+                "kind": getattr(cls, 'kind', ''),
+                "file": getattr(cls, 'source_file', ''),
+                "children": _find_descendants(all_items, name, max_depth, _depth + 1),
+            }
+            children.append(child_entry)
+    children.sort(key=lambda x: x["name"])
+    return children
+
+
+def _format_descendant_tree(lines: list[str], children: list[dict],
+                            indent: int = 2) -> None:
+    """Format descendant tree into indented text lines."""
+    for i, child in enumerate(children):
+        is_last = (i == len(children) - 1)
+        connector = "└── " if is_last else "├── "
+        ftag = f"  ({Path(child['file']).name})" if child.get('file') else ""
+        ktag = f" [{child['kind']}]" if child.get('kind') else ""
+        lines.append(" " * indent + connector + child["name"] + ktag + ftag)
+        if child.get("children"):
+            sub_indent = indent + (4 if is_last else 4)
+            _format_descendant_tree(lines, child["children"], sub_indent)
+
+
+def _hierarchy_cs(profile: ProjectProfile, class_name: str,
+                  direction: str, max_depth: int) -> RunResult:
+    """Hierarchy for C# projects — regex scan of .cs files + gdep.exe describe."""
+    import re
+
+    _CS_CLASS_RE = re.compile(
+        r'(?:class|struct|interface)\s+'
+        r'(\w+)'                          # class name
+        r'(?:<[^>]+>)?'                    # optional generic params
+        r'\s*:\s*'                         # colon
+        r'([^\{]+)',                        # base list (until opening brace)
+        re.MULTILINE,
+    )
+
+    def _parse_bases_from_describe(stdout: str) -> list[str]:
+        """Extract base types from describe console output."""
+        bases: list[str] = []
+        in_section = False
+        for line in stdout.splitlines():
+            stripped = line.strip()
+            if "Inheritance" in stripped and "Implementation" in stripped:
+                in_section = True
+                continue
+            if in_section:
+                if stripped.startswith(":"):
+                    bases.append(stripped.lstrip(": ").strip())
+                elif stripped.startswith("──") or (stripped and not stripped.startswith(":")):
+                    break
+                elif not stripped:
+                    continue
+        return bases
+
+    def _scan_cs_inheritance(source_dir: str) -> dict[str, list[tuple[str, str]]]:
+        """Scan all .cs files to build parent→[(child, file)] map via regex.
+
+        Much faster than calling gdep.exe describe for each class.
+        """
+        child_map: dict[str, list[tuple[str, str]]] = {}
+        src_path = Path(source_dir)
+        for cs_file in src_path.rglob("*.cs"):
+            try:
+                text = cs_file.read_text(encoding="utf-8-sig", errors="ignore")
+            except OSError:
+                continue
+            for m in _CS_CLASS_RE.finditer(text):
+                cls_name = m.group(1)
+                base_str = m.group(2).strip().rstrip("{").strip()
+                # Split "BaseClass, IFoo, IBar" → individual bases
+                for base in base_str.split(","):
+                    base = base.strip()
+                    # Remove generic params for matching: List<T> → List
+                    base_clean = re.sub(r'<[^>]*>', '', base).strip()
+                    if base_clean:
+                        child_map.setdefault(base_clean, []).append(
+                            (cls_name, cs_file.name))
+        return child_map
+
+    _CS_CLASS_DEF_RE = re.compile(
+        r'(?:class|struct|interface)\s+(\w+)',
+        re.MULTILINE,
+    )
+
+    def _collect_all_class_names(source_dir: str) -> set[str]:
+        """Collect all class/struct/interface names from .cs files."""
+        names: set[str] = set()
+        for cs_file in Path(source_dir).rglob("*.cs"):
+            try:
+                text = cs_file.read_text(encoding="utf-8-sig", errors="ignore")
+            except OSError:
+                continue
+            for m in _CS_CLASS_DEF_RE.finditer(text):
+                names.add(m.group(1))
+        return names
+
+    try:
+        src = _src(profile)
+
+        # --- Existence check ---
+        all_class_names = _collect_all_class_names(src)
+        if class_name not in all_class_names:
+            return RunResult(ok=False, stdout="",
+                             stderr=f"Class '{class_name}' not found in project.")
+
+        # --- Ancestor chain (upward) via gdep.exe describe ---
+        ancestor_chain: list[str] = []
+        if direction in ("up", "both"):
+            desc_result = run(["describe", src, class_name])
+            if desc_result.ok:
+                ancestor_chain = _parse_bases_from_describe(desc_result.stdout)
+
+        lines: list[str] = [f"── Inheritance Hierarchy: {class_name} ──"]
+
+        if direction in ("up", "both"):
+            lines.append("")
+            lines.append("▲ Ancestors (base classes):")
+            if ancestor_chain:
+                for i, base in enumerate(ancestor_chain[:max_depth]):
+                    prefix = "  ↑ " if i == 0 else "    " * i + "↑ "
+                    lines.append(f"  {prefix}{base}")
+            else:
+                lines.append("  (no base class — inherits from object)")
+
+        # --- Descendant tree (downward) via regex scan ---
+        if direction in ("down", "both"):
+            lines.append("")
+            lines.append("▼ Descendants (derived classes):")
+            child_map = _scan_cs_inheritance(src)
+
+            def _render_tree(name: str, depth: int, prefix: str) -> list[str]:
+                if depth >= max_depth:
+                    return []
+                children = sorted(child_map.get(name, []),
+                                  key=lambda x: x[0])  # sort by class name
+                result: list[str] = []
+                for i, (child, file_name) in enumerate(children):
+                    is_last = (i == len(children) - 1)
+                    connector = "└── " if is_last else "├── "
+                    loc = f"  ({file_name})" if file_name else ""
+                    result.append(f"  {prefix}{connector}{child}{loc}")
+                    extension = "    " if is_last else "│   "
+                    result.extend(_render_tree(child, depth + 1,
+                                              prefix + extension))
+                return result
+
+            tree_lines = _render_tree(class_name, 0, "")
+            if tree_lines:
+                lines.extend(tree_lines)
+            else:
+                lines.append("  (no derived classes found)")
+
+        return RunResult(ok=True, stdout="\n".join(lines), stderr="")
+    except Exception as e:
+        return RunResult(ok=False, stdout="", stderr=str(e))
 
 
 def graph(profile: ProjectProfile, fmt: str = "mermaid",

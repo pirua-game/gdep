@@ -61,7 +61,7 @@ npm install -g gdep-mcp
 }
 ```
 
-That's it. Your AI now has **21** game-engine-aware tools available on every conversation.
+That's it. Your AI now has **26** game-engine-aware tools available on every conversation.
 
 ### What changes with MCP
 
@@ -70,22 +70,27 @@ Without gdep:  "CombatCore probably has some Manager dependencies..." ← halluc
 With gdep:     Direct deps: 2 · Indirect: 200+ UI classes · Asset: prefabs/UI/combat.prefab
 ```
 
-### 21 MCP Tools at a glance
+### 26 MCP Tools at a glance
 
 | Tool | When to use |
 |------|-------------|
 | `get_project_context` | **Always call first** — full project overview |
 | `analyze_impact_and_risk` | Before modifying any class or method (`method_name=` for method-level callers; `detail_level="summary"` for quick count) |
-| `explain_method_logic` | Internal control flow of a single method — Guard/Branch/Loop/Always. Supports C++ namespace-style functions |
+| `explain_method_logic` | Internal control flow of a single method — Guard/Branch/Loop/Always. Supports C++ namespace-style functions. `include_source=True` appends method body |
 | `trace_gameplay_flow` | Trace C++ → Blueprint call chains (`summary=True` for compact output) |
 | `inspect_architectural_health` | Tech debt audit |
-| `explore_class_semantics` | Unfamiliar class deep-dive |
+| `explore_class_semantics` | Unfamiliar class deep-dive. Default `compact=True` keeps output AI-friendly (~4–8 KB); `include_source=True` appends source code |
 | `suggest_test_scope` | Which test files to run after modifying a class |
 | `suggest_lint_fixes` | Lint issues with code fix suggestions (dry-run) |
 | `summarize_project_diff` | Architecture-level summary of a git diff |
 | `get_architecture_advice` | Full project diagnosis + LLM-powered advice |
 | `find_method_callers` | Reverse call graph — who calls this method |
 | `find_call_path` | Shortest call path between two methods (A → B, **C#/Unity only**) |
+| `find_class_hierarchy` | Full inheritance tree — ancestors (parent chain) + descendants (subclass tree) |
+| `read_class_source` | Return actual source code of a class or a specific method. `method_name=` to return only that method's body (token-efficient) |
+| `find_unused_assets` | Unreferenced assets — Unity GUID scan / UE5 binary path reference scan |
+| `query_project_api` | Search project API by class/method/property name with relevance scoring |
+| `detect_patterns` | Detect design patterns in the codebase (Singleton, Subsystem, GAS, Component, etc.) |
 | `execute_gdep_cli` | Raw access to all CLI features |
 | `find_unity_event_bindings` | Inspector-wired methods (invisible in code search) |
 | `analyze_unity_animator` | Animator state machine structure |
@@ -269,7 +274,7 @@ gdep advise {path} --format json          # CI/MCP output
 Without LLM configured: structured data report (cycles/coupling/dead-code/lint).
 With LLM configured: IMMEDIATE / MID-TERM / LONG-TERM natural-language advice.
 
-### lint — 16 game-engine anti-pattern rules
+### lint — 19 game-engine anti-pattern rules
 
 ```bash
 gdep lint {path}                # scan
@@ -293,6 +298,9 @@ gdep lint {path} --fix          # scan + code fix suggestions (dry-run, no file 
 | `AXM-PERF-001` | Axmol | getChildByName/Tag in update() |
 | `AXM-MEM-001` | Axmol | retain() without release() |
 | `AXM-EVENT-001` | Axmol | addEventListenerWith* without removeEventListener |
+| `UE5-BP-001` | UE5 | Blueprint references a C++ class not found in source (orphan reference) |
+| `UE5-BP-002` | UE5 | Blueprint K2 override references a deleted/changed C++ function |
+| `UNI-ASSET-001` | Unity | Prefab script reference broken (.meta GUID mismatch) |
 | `GEN-ARCH-001` | Common | Circular dependency |
 
 ---

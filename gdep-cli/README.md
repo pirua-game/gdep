@@ -119,7 +119,7 @@ Claude Desktop config (`claude_desktop_config.json`):
 }
 ```
 
-### MCP Tools (21)
+### MCP Tools (26)
 
 | Tool | Scenario |
 |------|----------|
@@ -127,14 +127,19 @@ Claude Desktop config (`claude_desktop_config.json`):
 | `analyze_impact_and_risk` | Safety check before modifying a class or method (`method_name=` for method-level callers) |
 | `trace_gameplay_flow` | Trace how a feature works (C++→BP). `summary=True` for compact output |
 | `inspect_architectural_health` | Full tech debt diagnosis |
-| `explore_class_semantics` | Understand an unfamiliar class |
-| `explain_method_logic` | Internal control flow of a single method (Guard/Branch/Loop/Always) |
+| `explore_class_semantics` | Understand an unfamiliar class. Default `compact=True` keeps output AI-friendly; `include_source=True` appends source code |
+| `explain_method_logic` | Internal control flow of a single method (Guard/Branch/Loop/Always). `include_source=True` appends method body |
 | `suggest_test_scope` | Which test files to run after modifying a class |
 | `suggest_lint_fixes` | Lint issues with code fix suggestions (dry-run) |
 | `summarize_project_diff` | Architecture-level summary of a git diff |
 | `get_architecture_advice` | Full project diagnosis + LLM-powered advice |
 | `find_method_callers` | Reverse call graph — who calls this method |
 | `find_call_path` | Shortest call path between two methods (A → B, **C#/Unity only**) |
+| `find_class_hierarchy` | Full inheritance tree — ancestors (parent chain) + descendants (subclass tree) |
+| `read_class_source` | Return actual source code of a class or a specific method. `method_name=` for only that method's body |
+| `find_unused_assets` | Unreferenced assets — Unity GUID scan / UE5 binary path reference scan |
+| `query_project_api` | Search project API by class/method/property name with relevance scoring |
+| `detect_patterns` | Detect design patterns in the codebase (Singleton, Subsystem, GAS, Component, etc.) |
 | `execute_gdep_cli` | Raw access to all CLI features |
 | `find_unity_event_bindings` | Unity Inspector event bindings |
 | `analyze_unity_animator` | Unity Animator state machine |
@@ -174,6 +179,9 @@ Claude Desktop config (`claude_desktop_config.json`):
 | `UE5-GAS-003` | UE5 | Excessive BlueprintCallable (>10) |
 | `UE5-GAS-004` | UE5 | Missing const on BlueprintPure method |
 | `UE5-NET-001` | UE5 | Replicated property without callback |
+| `UE5-BP-001` | UE5 | Blueprint references a C++ class not found in source |
+| `UE5-BP-002` | UE5 | Blueprint K2 override references a deleted/changed C++ function |
+| `UNI-ASSET-001` | Unity | Prefab script reference broken (.meta GUID mismatch) |
 | `GEN-ARCH-001` | Common | Circular dependency |
 
 ---

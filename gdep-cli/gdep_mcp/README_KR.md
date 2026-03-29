@@ -54,7 +54,7 @@ pip install gdep "mcp[cli]"
 
 ---
 
-## 🛠 도구 목록 (19개)
+## 🛠 도구 목록 (26개)
 
 ### 컨텍스트 도구 — 세션 시작 시 첫 호출 권장
 
@@ -62,19 +62,26 @@ pip install gdep "mcp[cli]"
 |------|------|
 | `get_project_context` | 프로젝트 전체 개요. `.gdep/AGENTS.md` 있으면 읽고, 없으면 즉석 생성 |
 
-### High-level 의도 기반 도구 (9개)
+### High-level 의도 기반 도구 (14개)
 
 | 도구 | 설명 |
 |------|------|
 | `analyze_impact_and_risk` | 클래스·메서드 수정 전 파급 범위 + 린트. `method_name=`으로 메서드 레벨 호출자 추적; `detail_level="summary"`로 빠른 요약; `query=`로 결과 필터 |
-| `explain_method_logic` | 단일 메서드 내부 제어 흐름 요약 — Guard/Branch/Loop/Always 5~10줄. C++ namespace 함수 지원 |
+| `explain_method_logic` | 단일 메서드 내부 제어 흐름 요약 — Guard/Branch/Loop/Always 5~10줄. C++ namespace 함수 지원. `include_source=True`로 메서드 본문 첨부 |
 | `trace_gameplay_flow` | 메서드 호출 체인 추적 + 소스 코드 |
 | `inspect_architectural_health` | 결합도/순환참조/데드코드/안티패턴 |
-| `explore_class_semantics` | 클래스 구조 + AI 3줄 요약 |
+| `explore_class_semantics` | 클래스 구조 + AI 3줄 요약. 기본 `compact=True`로 출력 ~4–8 KB 제한; `include_source=True`로 소스 코드 첨부 |
 | `suggest_test_scope` | 클래스 수정 후 실행해야 할 테스트 파일 자동 산정 (CI JSON 출력 지원) |
 | `suggest_lint_fixes` | lint 이슈 + 코드 수정 제안 (dry-run, 파일 변경 없음) |
 | `summarize_project_diff` | git diff를 아키텍처 관점으로 요약 — 순환참조 신규/해소, 고결합 경고 |
 | `get_architecture_advice` | scan+lint+impact 종합 → 구조화 리포트 or LLM 아키텍처 어드바이스 |
+| `find_method_callers` | 역방향 호출 그래프 — 특정 메서드를 호출하는 모든 메서드 |
+| `find_call_path` | 두 메서드 간 최단 호출 경로 (A → B, **C#/Unity 전용**) |
+| `find_class_hierarchy` | 클래스 상속 계층 트리 — 조상(부모 체인) + 자손(하위 클래스 트리). `direction=up/down/both` |
+| `read_class_source` | 클래스 전체 또는 특정 메서드의 소스 코드 반환. `method_name=`으로 메서드 본문만 추출 (토큰 절약); `max_chars=`로 크기 제한 |
+| `find_unused_assets` | 미참조 에셋 감지 — Unity GUID 기반 / UE5 바이너리 경로 참조 스캔 |
+| `query_project_api` | 클래스·메서드·프로퍼티명으로 프로젝트 API 레퍼런스 검색. `scope=all/classes/methods/properties` |
+| `detect_patterns` | 코드베이스 내 디자인 패턴 감지 (싱글톤, Subsystem, GAS, 컴포넌트 구성 등) |
 
 ### Raw CLI 접근 (1개)
 

@@ -10,11 +10,12 @@ import { Search } from 'lucide-react'
 import { useApp } from '../store'
 // t() accessed via useApp()
 import {
-  projectApi, classesApi, unityApi, ue5Api, engineApi, engineAnalysisApi, analysisApi,
+  projectApi, classesApi, unityApi, ue5Api, engineApi, engineAnalysisApi, analysisApi, analysisNewApi,
   type CouplingItem, type ClassInfo, type PrefabRef, type BlueprintRef,
   type DeadNode, type ImpactNode, type TestScopeFile, type LintFixIssue,
 } from '../api/client'
 import { ConfidenceFromText } from './ConfidenceBadge'
+import MdResult from './MdResult'
 
 // ── 상속 그래프 빌더 ─────────────────────────────────────────
 function buildInheritanceGraph(target: string, classMap: Record<string, ClassInfo>) {
@@ -202,6 +203,10 @@ function InheritanceTab({
   // UE5 블루프린트 역참조
   const [bpRef,     setBpRef]    = useState<BlueprintRef | null>(null)
   const [bpLoading, setBpLoading] = useState(false)
+  // 계층 트리 (find_class_hierarchy)
+  const [hierarchyDir,     setHierarchyDir]     = useState<'up'|'down'|'both'>('both')
+  const [hierarchyResult,  setHierarchyResult]  = useState('')
+  const [hierarchyLoading, setHierarchyLoading] = useState(false)
 
   useEffect(() => {
     const cached = getCache(scriptsPath).classMap
@@ -302,6 +307,35 @@ function InheritanceTab({
                 </div>
               </div>
 
+              {/* 계층 트리 (find_class_hierarchy) */}
+              <div>
+                <p className="text-xs text-gray-500 mb-1">{t('inh_hierarchy_btn')}</p>
+                <div className="flex gap-1 mb-1">
+                  {(['up', 'down', 'both'] as const).map(d => (
+                    <button key={d} onClick={() => setHierarchyDir(d)}
+                      className={`text-xs px-2 py-0.5 rounded ${
+                        hierarchyDir === d ? 'bg-indigo-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                      }`}>
+                      {t(d === 'up' ? 'inh_dir_up' : d === 'down' ? 'inh_dir_down' : 'inh_dir_both')}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={async () => {
+                    setHierarchyLoading(true); setHierarchyResult('')
+                    try {
+                      const res = await analysisNewApi.hierarchy(scriptsPath, selected, hierarchyDir)
+                      setHierarchyResult(res)
+                    } catch (e: any) {
+                      setHierarchyResult(`Error: ${e?.response?.data?.detail ?? e?.message ?? e}`)
+                    } finally { setHierarchyLoading(false) }
+                  }}
+                  disabled={hierarchyLoading}
+                  className="btn-primary text-xs px-3 py-1 disabled:opacity-50">
+                  {hierarchyLoading ? t('analyzing') : t('inh_hierarchy_btn')}
+                </button>
+              </div>
+
               {/* UE5 블루프린트 사용처 */}
               {isUnreal && (
                 <div>
@@ -328,23 +362,30 @@ function InheritanceTab({
               )}
             </div>
 
-            {/* ReactFlow 그래프 */}
-            <div className="flex-1 min-h-0">
-              {nodes.length > 1 ? (
-                <ReactFlow
-                  nodes={nodes} edges={edges}
-                  onNodesChange={onNodesChange}
-                  onEdgesChange={onEdgesChange}
-                  fitView
-                  attributionPosition="bottom-right"
-                  style={{ background: '#111827' }}
-                >
-                  <Background color="#374151" gap={20}/>
-                  <Controls/>
-                </ReactFlow>
-              ) : (
-                <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-                  {t('inh_no_rel')}
+            {/* ReactFlow 그래프 + 계층 트리 결과 */}
+            <div className="flex-1 min-h-0 flex flex-col">
+              <div className={hierarchyResult ? 'h-1/2 min-h-0' : 'flex-1 min-h-0'}>
+                {nodes.length > 1 ? (
+                  <ReactFlow
+                    nodes={nodes} edges={edges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    fitView
+                    attributionPosition="bottom-right"
+                    style={{ background: '#111827' }}
+                  >
+                    <Background color="#374151" gap={20}/>
+                    <Controls/>
+                  </ReactFlow>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+                    {t('inh_no_rel')}
+                  </div>
+                )}
+              </div>
+              {(hierarchyResult || hierarchyLoading) && (
+                <div className="h-1/2 min-h-0 border-t border-gray-800 overflow-y-auto p-3 bg-gray-900/50">
+                  <MdResult text={hierarchyResult} loading={hierarchyLoading} />
                 </div>
               )}
             </div>
@@ -791,38 +832,7 @@ function ImpactTab({ scriptsPath }: { scriptsPath: string }) {
 }
 
 
-// 마크다운 텍스트를 보기 좋게 렌더링하는 단순 컴포넌트
-function MdResult({ text, loading }: { text: string; loading: boolean }) {
-  const { t } = useApp()
-  if (loading) return (
-    <p className="text-gray-500 text-sm animate-pulse">{t('md_long_analyzing')}</p>
-  )
-  if (!text) return (
-    <p className="text-gray-600 text-sm">{t('md_start_hint')}</p>
-  )
-  return (
-    <div className="space-y-0.5">
-      {text.split('\n').map((line, i) => {
-        if (line.startsWith('# '))
-          return <h2 key={i} className="text-base font-bold text-white mt-3 mb-1">{line.slice(2)}</h2>
-        if (line.startsWith('## '))
-          return <h3 key={i} className="text-sm font-semibold text-emerald-400 mt-3 mb-1 border-b border-gray-800 pb-1">{line.slice(3)}</h3>
-        if (line.startsWith('### '))
-          return <h4 key={i} className="text-sm font-medium text-yellow-400 mt-2 mb-0.5">{line.slice(4)}</h4>
-        if (line.startsWith('- '))
-          return <p key={i} className="text-sm text-gray-300 pl-3">• {line.slice(2)}</p>
-        if (line.startsWith('  - '))
-          return <p key={i} className="text-sm text-gray-400 pl-6">· {line.slice(4)}</p>
-        if (line.startsWith('| '))
-          return <p key={i} className="text-xs font-mono text-gray-400 pl-2">{line}</p>
-        if (line.startsWith('```'))
-          return null
-        if (line.trim() === '') return <div key={i} className="h-1.5" />
-        return <p key={i} className="text-sm text-gray-400">{line}</p>
-      })}
-    </div>
-  )
-}
+// MdResult → ./MdResult.tsx 로 분리됨
 
 // ── Unity Event 바인딩 탭 ─────────────────────────────────────
 function UnityEventsTab({ scriptsPath }: { scriptsPath: string }) {
@@ -1588,6 +1598,97 @@ function DiffSummaryTab({ scriptsPath }: { scriptsPath: string }) {
 }
 
 // ── 🪓 Axmol Events 탭 ───────────────────────────────────────
+// ── Patterns Tab ──────────────────────────────────────────────
+function PatternsTab({ scriptsPath }: { scriptsPath: string }) {
+  const { t } = useApp()
+  const [loading, setLoading] = useState(false)
+  const [result,  setResult]  = useState('')
+  const [maxResults, setMaxResults] = useState(30)
+
+  async function run() {
+    setLoading(true); setResult('')
+    try {
+      const res = await analysisNewApi.detectPatterns(scriptsPath, maxResults)
+      setResult(res)
+    } catch (e: any) {
+      setResult(`Error: ${e?.response?.data?.detail ?? e?.message ?? e}`)
+    } finally { setLoading(false) }
+  }
+
+  return (
+    <div className="flex flex-col h-full p-4 gap-3 overflow-hidden">
+      <div className="flex items-center gap-3 shrink-0 flex-wrap">
+        <input
+          type="number" min={5} max={100}
+          className="input text-sm w-24"
+          placeholder={t('patterns_max_ph')}
+          value={maxResults}
+          onChange={e => setMaxResults(Number(e.target.value) || 30)}
+        />
+        <button onClick={run} disabled={loading}
+          className="btn-primary text-sm px-4 py-1.5 disabled:opacity-50">
+          {loading ? t('analyzing') : t('patterns_btn')}
+        </button>
+        <p className="text-xs text-gray-500">{t('patterns_desc')}</p>
+      </div>
+      <div className="flex-1 overflow-y-auto border border-gray-800 rounded bg-gray-900/50 p-4">
+        <MdResult text={result} loading={loading} />
+      </div>
+    </div>
+  )
+}
+
+
+// ── Unused Assets Tab ─────────────────────────────────────────
+function UnusedAssetsTab({ scriptsPath }: { scriptsPath: string }) {
+  const { t } = useApp()
+  const [scanDir,    setScanDir]    = useState('')
+  const [maxResults, setMaxResults] = useState(50)
+  const [loading,    setLoading]    = useState(false)
+  const [result,     setResult]     = useState('')
+
+  async function run() {
+    setLoading(true); setResult('')
+    try {
+      const res = await analysisNewApi.unusedAssets(scriptsPath, scanDir || undefined, maxResults)
+      setResult(res)
+    } catch (e: any) {
+      setResult(`Error: ${e?.response?.data?.detail ?? e?.message ?? e}`)
+    } finally { setLoading(false) }
+  }
+
+  return (
+    <div className="flex flex-col h-full p-4 gap-3 overflow-hidden">
+      <div className="flex items-center gap-3 shrink-0 flex-wrap">
+        <input
+          className="input text-sm w-64"
+          placeholder={t('unused_scan_dir_ph')}
+          value={scanDir}
+          onChange={e => setScanDir(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && run()}
+        />
+        <input
+          type="number" min={10} max={200}
+          className="input text-sm w-24"
+          placeholder={t('unused_max_ph')}
+          value={maxResults}
+          onChange={e => setMaxResults(Number(e.target.value) || 50)}
+        />
+        <button onClick={run} disabled={loading}
+          className="btn-primary text-sm px-4 py-1.5 disabled:opacity-50">
+          {loading ? t('analyzing') : t('unused_btn')}
+        </button>
+        <p className="text-xs text-gray-500">{t('unused_desc')}</p>
+      </div>
+      <div className="flex-1 overflow-y-auto border border-gray-800 rounded bg-gray-900/50 p-4">
+        {result && !loading && <div className="mb-2"><ConfidenceFromText text={result} /></div>}
+        <MdResult text={result} loading={loading} />
+      </div>
+    </div>
+  )
+}
+
+
 function AxmolEventsTab({ scriptsPath }: { scriptsPath: string }) {
   const { t } = useApp()
   const [methodFilter, setMethodFilter] = useState('')
@@ -1632,6 +1733,7 @@ function AxmolEventsTab({ scriptsPath }: { scriptsPath: string }) {
 type TabId = 'coupling' | 'inheritance' | 'prefabs' | 'blueprints' | 'deadcode' | 'impact'
            | 'unity_events' | 'unity_animator' | 'ue5_gas' | 'ue5_animation' | 'ue5_ai' | 'ue5_bp_mapping'
            | 'test_scope' | 'advise' | 'lint_fix' | 'diff_summary' | 'axmol_events'
+           | 'patterns' | 'unused_assets'
 
 // 엔진 탭 드롭다운 버튼 컴포넌트
 function EngineTabDropdown({
@@ -1709,13 +1811,15 @@ export default function DependencyView() {
     ['advise',      t('dep_advise')],
     ['lint_fix',    t('dep_lint_fix')],
     ['diff_summary',t('dep_diff_summary')],
+    ['patterns',    t('dep_patterns')],
   ]
 
   // 엔진별 탭 (드롭다운으로 묶음)
   const unityTabs: [TabId, string][] = [
     ['prefabs',        t('dep_prefabs')],
     ['unity_events',   t('dep_unity_events')],
-    ['unity_animator', t('dep_unity_anim')],
+    ['unity_animator',  t('dep_unity_anim')],
+    ['unused_assets',   t('dep_unused_assets')],
   ]
 
   const ue5Tabs: [TabId, string][] = [
@@ -1723,7 +1827,8 @@ export default function DependencyView() {
     ['ue5_gas',        t('dep_ue5_gas')],
     ['ue5_animation',  t('dep_ue5_anim')],
     ['ue5_ai',         t('dep_ue5_ai')],
-    ['ue5_bp_mapping', t('dep_ue5_bp_map')],
+    ['ue5_bp_mapping',  t('dep_ue5_bp_map')],
+    ['unused_assets',   t('dep_unused_assets')],
   ]
 
   const axmolTabs: [TabId, string][] = [
@@ -1798,6 +1903,8 @@ export default function DependencyView() {
         {activeTab === 'ue5_ai'         && <UE5AITab         scriptsPath={scriptsPath}/>}
         {activeTab === 'ue5_bp_mapping' && <UE5BpMappingTab  scriptsPath={scriptsPath}/>}
         {activeTab === 'axmol_events'   && <AxmolEventsTab   scriptsPath={scriptsPath}/>}
+        {activeTab === 'patterns'       && <PatternsTab      scriptsPath={scriptsPath}/>}
+        {activeTab === 'unused_assets'  && <UnusedAssetsTab  scriptsPath={scriptsPath}/>}
       </div>
     </div>
   )

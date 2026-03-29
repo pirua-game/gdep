@@ -18,7 +18,7 @@ if str(_GDEP_ROOT) not in sys.path:
 
 from gdep.runner import _load_cs_cache, _src, ANSI_ESCAPE
 from gdep.confidence import ConfidenceTier, confidence_footer
-from gdep.detector import detect
+from gdep.detector import detect, ProjectKind
 
 
 def _parse_diff_text(text: str) -> dict:
@@ -144,6 +144,15 @@ def run(project_path: str, commit_ref: str | None = None) -> str:
     try:
         profile = detect(project_path)
         commit = commit_ref or "HEAD~1"
+
+        # 0. Guard: diff only supports C# (Unity/Dotnet) projects
+        if profile.kind not in (ProjectKind.UNITY, ProjectKind.DOTNET):
+            return (
+                f"[summarize_project_diff] This tool only supports C# (Unity/.NET) projects.\n"
+                f"Detected engine: {profile.display}\n\n"
+                "For UE5/C++ projects, use `inspect_architectural_health` to assess "
+                "the current architectural state instead."
+            )
 
         # 1. Run diff via subprocess (same pattern as execute_gdep_cli, explicit timeout)
         src_path = _src(profile)

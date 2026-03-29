@@ -40,7 +40,7 @@ pip install gdep "mcp[cli]"
 
 ---
 
-## 🛠 ツール一覧（19個）
+## 🛠 ツール一覧（26個）
 
 ### コンテキストツール
 
@@ -48,19 +48,26 @@ pip install gdep "mcp[cli]"
 |--------|------|
 | `get_project_context` | **セッション開始時に最初に呼び出す** — プロジェクト全体概要 |
 
-### ハイレベル意図ベースツール（9個）
+### ハイレベル意図ベースツール（14個）
 
 | ツール | 説明 |
 |--------|------|
 | `analyze_impact_and_risk` | クラス・メソッド変更前の波及範囲 + リント。`method_name=` でメソッドレベル呼び出し元追跡；`detail_level="summary"` で高速要約；`query=` で結果フィルタ |
-| `explain_method_logic` | 単一メソッドの内部制御フロー要約 — Guard/Branch/Loop/Always を5〜10行で。C++ namespace 関数対応 |
+| `explain_method_logic` | 単一メソッドの内部制御フロー要約 — Guard/Branch/Loop/Always を5〜10行で。C++ namespace 関数対応。`include_source=True` でメソッド本文を追加 |
 | `trace_gameplay_flow` | メソッド呼び出しチェーン追跡 + ソースコード |
 | `inspect_architectural_health` | 結合度/循環参照/デッドコード/アンチパターン |
-| `explore_class_semantics` | クラス構造 + AI 3行要約 |
+| `explore_class_semantics` | クラス構造 + AI 3行要約。デフォルト `compact=True` で出力 ~4–8 KB 制限；`include_source=True` でソースコード追加 |
 | `suggest_test_scope` | クラス変更後に実行すべきテストファイル自動特定（CI JSON出力対応） |
 | `suggest_lint_fixes` | lint問題 + コード修正提案（dry-run、ファイル変更なし） |
 | `summarize_project_diff` | git diffをアーキテクチャ観点で要約 — 循環参照増減・高結合警告 |
 | `get_architecture_advice` | scan+lint+impact総合 → 構造化レポートまたはLLMアーキテクチャアドバイス |
+| `find_method_callers` | 逆方向コールグラフ — 特定のメソッドを呼び出すすべてのメソッド |
+| `find_call_path` | 2つのメソッド間の最短呼び出しパス（A → B、**C#/Unity のみ**） |
+| `find_class_hierarchy` | クラス継承階層ツリー — 祖先（親チェーン）+ 子孫（サブクラスツリー）。`direction=up/down/both` |
+| `read_class_source` | クラス全体または特定メソッドのソースコードを返す。`method_name=` で対象メソッド本文のみ取得（トークン節約）；`max_chars=` でサイズ制限 |
+| `find_unused_assets` | 未参照アセット検出 — Unity GUID スキャン / UE5 バイナリパス参照スキャン |
+| `query_project_api` | クラス・メソッド・プロパティ名でプロジェクト API を検索。`scope=all/classes/methods/properties` |
+| `detect_patterns` | コードベースのデザインパターン検出（シングルトン、サブシステム、GAS、コンポーネント構成など） |
 
 ### Raw CLIアクセス
 

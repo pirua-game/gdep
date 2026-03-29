@@ -6,6 +6,8 @@ const KO = {
   // ── App tabs ──────────────────────────────────────────────────────────────
   tab_browser:    '📂 클래스 브라우저',
   tab_flow:       '🔀 흐름 그래프',
+  tab_analysis:   '🔬 분석',
+  tab_engine:     '🎮 엔진',
   tab_dependency: '🕸️ 의존성 · 분석',
   tab_watch:      '⚡ Watch',
   tab_agent:      '🤖 AI 에이전트',
@@ -52,7 +54,8 @@ const KO = {
   no_bp:                    '어떤 블루프린트/맵에서도 사용되지 않음',
   fields:                   '📦 필드',
   methods:                  '⚙️ 메서드',
-  flow_analysis:            '🔀 흐름 분석',
+  flow_analysis:            '🔍 메서드 상세 분석',
+  method_run_flow:          '▶ 흐름 그래프',
   analyzing:                '분석 중...',
   lifecycle_entry:          '라이프사이클 진입점',
   method_search_placeholder:'메서드 검색...',
@@ -252,12 +255,82 @@ const KO = {
   axmol_filter_ph:     '메서드 필터 (선택 — 비우면 전체)',
   axmol_analyze_btn:   '🪓 Axmol Events 분석',
   axmol_desc:          'EventDispatcher / Scheduler 콜백 바인딩 맵',
+
+  // ── 신규 분석 탭 (Phase 3) ──────────────────────────────────
+  dep_patterns:        '🧩 패턴 감지',
+  dep_unused_assets:   '🗑️ 미사용 에셋',
+  dep_method_callers:  '↩ 역호출 추적',
+  dep_call_path:       '🔗 호출 경로',
+  dep_api_search:      '🔍 API 검색',
+  engine_no_engine:    '이 프로젝트에서 게임 엔진이 감지되지 않았습니다.',
+
+  // ── ClassBrowser 신규 기능 ──────────────────────────────────
+  semantics_btn:       '🔍 AI 요약',
+  semantics_compact:   'Compact',
+  semantics_source:    '소스 포함',
+  method_view_source:  '{ } 소스 보기',
+  method_callers_btn:  '📡 호출 추적',
+  // 툴팁
+  tooltip_method_logic:    '메서드 내부의 분기·루프·예외 등 제어 흐름을 정적 분석합니다',
+  tooltip_lint:            '프로젝트 전체에서 안티패턴과 코드 품질 문제를 스캔합니다',
+  tooltip_api_search:      '클래스·메서드·프로퍼티를 이름으로 검색합니다',
+  tooltip_ai_summary:      '클래스의 역할·구조·관계를 AI로 요약합니다',
+  tooltip_compact:         '간결한 요약 모드 (해제 시 상세 분석)',
+  tooltip_method_callers:  '이 메서드를 호출하는 모든 위치를 추적합니다',
+  // 클래스 타입 뱃지
+  badge_project_tip:        '🟢 프로젝트 클래스 — 사용자가 작성한 클래스',
+  badge_engine_derived_tip: '🟡 엔진 파생 클래스 — 엔진 클래스를 상속받은 클래스',
+  badge_engine_base_tip:    '🔴 엔진 기본 클래스 — 엔진 내장 클래스',
+  // 폴더 선택기
+  folder_picker_tip:     '폴더 탐색기를 엽니다',
+  folder_picker_title:   '폴더 선택',
+  folder_picker_select:  '선택',
+  folder_picker_cancel:  '취소',
+  folder_picker_up:      '상위 폴더',
+  folder_picker_empty:   '하위 폴더 없음',
+
+  patterns_btn:        '🧩 패턴 감지',
+  patterns_desc:       '코드베이스에서 사용 중인 디자인 패턴 감지 (싱글톤, 서브시스템, GAS, 컴포넌트 등)',
+  patterns_max_ph:     '최대 결과 수',
+
+  unused_btn:          '🗑️ 미사용 에셋 스캔',
+  unused_desc:         '미참조 에셋 감지 — Unity GUID 스캔 / UE5 바이너리 경로 참조 스캔',
+  unused_scan_dir_ph:  '하위 디렉토리 필터 (선택)',
+  unused_max_ph:       '최대 결과 수',
+
+  api_search_mode:     '🔍 API 검색',
+  api_search_ph:       '메서드, 프로퍼티 검색...',
+  api_scope_all:       '전체',
+  api_scope_classes:   '클래스',
+  api_scope_methods:   '메서드',
+  api_scope_properties:'프로퍼티',
+  api_search_btn:      '🔍 검색',
+
+  flow_reverse_callers:'↩ 역호출 추적',
+  flow_find_path:      '🔗 경로 탐색',
+  flow_callers_btn:    '↩ 누가 호출하나?',
+  flow_callers_desc:   '선택한 메서드를 호출하는 모든 메서드 역추적',
+  flow_path_desc:      '두 메서드 간 최단 호출 경로 탐색 (C#/Unity 전용)',
+  flow_from:           '시작',
+  flow_to:             '도착',
+  flow_find_btn:       '🔗 경로 탐색',
+  flow_no_path:        '경로를 찾을 수 없습니다',
+  flow_class_ph:       '클래스명',
+  flow_method_ph:      '메서드명',
+
+  inh_hierarchy_btn:   '🌲 계층 트리',
+  inh_direction:       '방향',
+  inh_dir_up:          '⬆ 조상',
+  inh_dir_down:        '⬇ 자손',
+  inh_dir_both:        '↕ 양방향',
 } as const
 
 const EN = {
   // ── App tabs ──────────────────────────────────────────────────────────────
   tab_browser:    '📂 Class Browser',
   tab_flow:       '🔀 Flow Graph',
+  tab_analysis:   '🔬 Analysis',
+  tab_engine:     '🎮 Engine',
   tab_dependency: '🕸️ Dependencies',
   tab_watch:      '⚡ Watch',
   tab_agent:      '🤖 AI Agent',
@@ -304,7 +377,8 @@ const EN = {
   no_bp:                    'Not used in any blueprint or map',
   fields:                   '📦 Fields',
   methods:                  '⚙️ Methods',
-  flow_analysis:            '🔀 Flow Analysis',
+  flow_analysis:            '🔍 Method Analysis',
+  method_run_flow:          '▶ Flow Graph',
   analyzing:                'Analyzing...',
   lifecycle_entry:          'Lifecycle Entry Points',
   method_search_placeholder:'Search methods...',
@@ -504,6 +578,74 @@ const EN = {
   axmol_filter_ph:     'Method filter (optional — empty = all)',
   axmol_analyze_btn:   '🪓 Analyze Axmol Events',
   axmol_desc:          'EventDispatcher / Scheduler callback binding map',
+
+  // ── New analysis tabs (Phase 3) ─────────────────────────────
+  dep_patterns:        '🧩 Patterns',
+  dep_unused_assets:   '🗑️ Unused Assets',
+  dep_method_callers:  '↩ Method Callers',
+  dep_call_path:       '🔗 Call Path',
+  dep_api_search:      '🔍 API Search',
+  engine_no_engine:    'No game engine detected for this project.',
+
+  // ── ClassBrowser new features ───────────────────────────────
+  semantics_btn:       '🔍 AI Summary',
+  semantics_compact:   'Compact',
+  semantics_source:    'Include Source',
+  method_view_source:  '{ } View Source',
+  method_callers_btn:  '📡 Callers',
+  // Tooltips
+  tooltip_method_logic:    'Statically analyzes the control flow inside a method (branches, loops, exceptions, etc.)',
+  tooltip_lint:            'Scans the project for anti-patterns and code quality issues',
+  tooltip_api_search:      'Search classes, methods, and properties by name',
+  tooltip_ai_summary:      'AI-powered summary of class role, structure, and relationships',
+  tooltip_compact:         'Concise summary mode (uncheck for detailed analysis)',
+  tooltip_method_callers:  'Find all locations that call this method',
+  // Class type badges
+  badge_project_tip:        '🟢 Project class — user-authored class',
+  badge_engine_derived_tip: '🟡 Engine-derived class — inherits from engine base class',
+  badge_engine_base_tip:    '🔴 Engine base class — built-in engine class',
+  // Folder picker
+  folder_picker_tip:     'Open folder browser',
+  folder_picker_title:   'Select Folder',
+  folder_picker_select:  'Select',
+  folder_picker_cancel:  'Cancel',
+  folder_picker_up:      'Parent folder',
+  folder_picker_empty:   'No subdirectories',
+
+  patterns_btn:        '🧩 Detect Patterns',
+  patterns_desc:       'Detect design patterns in the codebase (Singleton, Subsystem, GAS, Component, etc.)',
+  patterns_max_ph:     'Max results',
+
+  unused_btn:          '🗑️ Scan Unused Assets',
+  unused_desc:         'Find unreferenced assets — Unity GUID scan / UE5 binary path reference scan',
+  unused_scan_dir_ph:  'Subdirectory filter (optional)',
+  unused_max_ph:       'Max results',
+
+  api_search_mode:     '🔍 API Search',
+  api_search_ph:       'Search methods, properties...',
+  api_scope_all:       'All',
+  api_scope_classes:   'Classes',
+  api_scope_methods:   'Methods',
+  api_scope_properties:'Properties',
+  api_search_btn:      '🔍 Search',
+
+  flow_reverse_callers:'↩ Reverse Callers',
+  flow_find_path:      '🔗 Find Path',
+  flow_callers_btn:    '↩ Who calls this?',
+  flow_callers_desc:   'Reverse-trace all methods that call the selected method',
+  flow_path_desc:      'Find shortest call path between two methods (C#/Unity only)',
+  flow_from:           'From',
+  flow_to:             'To',
+  flow_find_btn:       '🔗 Find Path',
+  flow_no_path:        'No path found',
+  flow_class_ph:       'Class name',
+  flow_method_ph:      'Method name',
+
+  inh_hierarchy_btn:   '🌲 Hierarchy Tree',
+  inh_direction:       'Direction',
+  inh_dir_up:          '⬆ Ancestors',
+  inh_dir_down:        '⬇ Descendants',
+  inh_dir_both:        '↕ Both',
 } as const
 
 export type TranslationKey = keyof typeof KO

@@ -3,7 +3,8 @@ import { AppProvider, useApp } from './store'
 import Sidebar from './components/Sidebar'
 import ClassBrowser from './components/ClassBrowser'
 import FlowGraph from './components/FlowGraph'
-import DependencyView from './components/DependencyView'
+import AnalysisView from './components/AnalysisView'
+import EngineView from './components/EngineView'
 import AgentChat from './components/AgentChat'
 import WatchPanel from './components/WatchPanel'
 
@@ -12,11 +13,12 @@ function MainContent() {
   const { t, theme, toggleTheme, lang, toggleLang } = useApp()
 
   const TABS = [
-    { id: 'browser',    label: t('tab_browser') },
-    { id: 'flow',       label: t('tab_flow') },
-    { id: 'dependency', label: t('tab_dependency') },
-    { id: 'watch',      label: t('tab_watch') },
-    { id: 'agent',      label: t('tab_agent') },
+    { id: 'browser',  label: t('tab_browser') },
+    { id: 'flow',     label: t('tab_flow') },
+    { id: 'analysis', label: t('tab_analysis') },
+    { id: 'engine',   label: t('tab_engine') },
+    { id: 'watch',    label: t('tab_watch') },
+    { id: 'agent',    label: t('tab_agent') },
   ]
 
   return (
@@ -55,11 +57,12 @@ function MainContent() {
 
       {/* 탭 콘텐츠 */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'browser'    && <ClassBrowser onFlowReady={() => setActiveTab('flow')} />}
-        {activeTab === 'flow'       && <FlowGraph />}
-        {activeTab === 'dependency' && <DependencyView />}
-        {activeTab === 'watch'      && <WatchPanel />}
-        {activeTab === 'agent'      && <AgentChat />}
+        {activeTab === 'browser'  && <ClassBrowser onFlowReady={() => setActiveTab('flow')} />}
+        {activeTab === 'flow'     && <FlowGraph />}
+        {activeTab === 'analysis' && <AnalysisView />}
+        {activeTab === 'engine'   && <EngineView />}
+        {activeTab === 'watch'    && <WatchPanel />}
+        {activeTab === 'agent'    && <AgentChat />}
       </div>
     </div>
   )

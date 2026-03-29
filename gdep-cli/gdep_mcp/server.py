@@ -37,6 +37,7 @@ _GDEP_ROOT = _HERE.parent                   # gdep-cli/
 if str(_GDEP_ROOT) not in sys.path:
     sys.path.insert(0, str(_GDEP_ROOT))
 
+import anyio
 from mcp.server.fastmcp import FastMCP
 from gdep.confidence import ConfidenceTier, confidence_footer
 from gdep_mcp.tools.analyze_impact_and_risk import run as _impact_run
@@ -50,6 +51,11 @@ from gdep_mcp.tools.analyze_axmol_events import run as _axmol_events_run
 from gdep_mcp.tools.explain_method_logic import run as _explain_logic_run
 from gdep_mcp.tools.find_method_callers import run as _callers_run
 from gdep_mcp.tools.find_call_path import run as _path_run
+from gdep_mcp.tools.find_class_hierarchy import run as _hierarchy_run
+from gdep_mcp.tools.find_unused_assets import run as _unused_assets_run
+from gdep_mcp.tools.read_class_source import run as _read_source_run
+from gdep_mcp.tools.query_project_api import run as _query_api_run
+from gdep_mcp.tools.detect_patterns import run as _detect_patterns_run
 
 # ── 추가 분석 모듈 (3~7단계 기능) — 로드 실패해도 서버는 기동됨 ──
 try:
@@ -101,7 +107,7 @@ mcp = FastMCP("gdep")
 # ════════════════════════════════════════════════════════════════
 
 @mcp.tool()
-def get_project_context(project_path: str) -> str:
+async def get_project_context(project_path: str) -> str:
     """
     Get a complete AI-ready overview of the game project. CALL THIS FIRST.
 
@@ -118,17 +124,20 @@ def get_project_context(project_path: str) -> str:
     Args:
         project_path: Any path within the game project (root, Source, or Assets).
     """
-    try:
-        from gdep.init_context import build_context_output
-        return build_context_output(project_path)
-    except Exception as e:
-        return f"[get_project_context] Error: {e}"
+    def _run():
+        try:
+            from gdep.init_context import build_context_output
+            return build_context_output(project_path)
+        except Exception as e:
+            return f"[get_project_context] Error: {e}"
+    return await anyio.to_thread.run_sync(_run)
 
 @mcp.tool()
-def analyze_impact_and_risk(project_path: str, class_name: str,
-                             method_name: str | None = None,
-                             detail_level: str = "summary",
-                             query: str | None = None) -> str:
+async def analyze_impact_and_risk(project_path: str, class_name: str,
+                                   method_name: str | None = None,
+                                   detail_level: str = "summary",
+                                   query: str | None = None,
+                                   max_results: int = 0) -> str:
     """
     Analyze the blast radius and risks before modifying a class or method.
 
@@ -157,17 +166,20 @@ def analyze_impact_and_risk(project_path: str, class_name: str,
                       "full"    — complete impact tree + all lint issues (expensive, use sparingly).
         query:        Optional filter string — only results containing this
                       class name or pattern are included. E.g. "Battle", "Manager"
+        max_results:  Maximum lint issues to show (default 0 = auto: 5 summary / 20 full).
     """
-    return _impact_run(project_path, class_name, method_name, detail_level, query)
+    return await anyio.to_thread.run_sync(
+        lambda: _impact_run(project_path, class_name, method_name, detail_level, query, max_results)
+    )
 
 
 @mcp.tool()
-def trace_gameplay_flow(project_path: str,
-                         class_name: str,
-                         method_name: str,
-                         depth: int = 5,
-                         include_source: bool = True,
-                         summary: bool = False) -> str:
+async def trace_gameplay_flow(project_path: str,
+                               class_name: str,
+                               method_name: str,
+                               depth: int = 5,
+                               include_source: bool = True,
+                               summary: bool = False) -> str:
 
     """
     Trace a method's full call chain and show relevant source code.
@@ -192,12 +204,14 @@ def trace_gameplay_flow(project_path: str,
         summary:        Compact 2-level tree with stats. Saves tokens for agent use.
                         When True, include_source is forced False.
     """
-    return _flow_run(project_path, class_name, method_name, depth, include_source, summary)
+    return await anyio.to_thread.run_sync(
+        lambda: _flow_run(project_path, class_name, method_name, depth, include_source, summary)
+    )
 
 
 @mcp.tool()
-def inspect_architectural_health(project_path: str, include_dead_code: bool = True,
-                                  include_refs: bool = True, top: int = 15) -> str:
+async def inspect_architectural_health(project_path: str, include_dead_code: bool = True,
+                                        include_refs: bool = True, top: int = 15) -> str:
     """
     Full architectural health check: coupling, cycles, dead code, and anti-patterns.
 
@@ -216,12 +230,17 @@ def inspect_architectural_health(project_path: str, include_dead_code: bool = Tr
         include_refs:      Factor in engine asset refs for dead-code filtering (default True).
         top:               Number of high-coupling classes to show (default 15).
     """
-    return _health_run(project_path, include_dead_code, include_refs, top)
+    return await anyio.to_thread.run_sync(
+        lambda: _health_run(project_path, include_dead_code, include_refs, top)
+    )
 
 
 @mcp.tool()
-def explore_class_semantics(project_path: str, class_name: str,
-                             summarize: bool = True, refresh: bool = False) -> str:
+async def explore_class_semantics(project_path: str, class_name: str,
+                                   summarize: bool = True, refresh: bool = False,
+                                   include_source: bool = False,
+                                   max_source_chars: int = 6000,
+                                   compact: bool = True) -> str:
     """
     Get the full structure of a class with an optional AI-generated role summary.
 
@@ -236,15 +255,136 @@ def explore_class_semantics(project_path: str, class_name: str,
     - Fields, methods, in/out dependencies
     - Unity prefab / UE5 blueprint usages (engine asset back-references)
     - 3-line AI summary of the class role (when LLM is configured via gdep config llm)
+    - Source code appended (when include_source=True)
+
+    Args:
+        project_path:     Absolute path to Scripts/Source folder.
+        class_name:       Class to explore. E.g. "ManagerBattle", "AHSAttributeSet"
+        summarize:        Generate AI 3-line summary if LLM is configured. Default True.
+        refresh:          Ignore cache and regenerate summary. Default False.
+        include_source:   Append actual source code after structure analysis. Default False.
+                          Use when you need to understand implementation details immediately.
+        max_source_chars: Max chars for appended source (default 6000).
+        compact:          Limit items per section for AI-friendly output (default True).
+                          Shows top 15 fields, 25 methods, 10 ext refs with counts.
+                          Use compact=False only when you need the complete listing.
+    """
+    return await anyio.to_thread.run_sync(
+        lambda: _semantics_run(project_path, class_name, summarize, refresh,
+                               include_source, max_source_chars, compact)
+    )
+
+
+@mcp.tool()
+async def find_class_hierarchy(project_path: str, class_name: str,
+                                direction: str = "both",
+                                max_depth: int = 10) -> str:
+    """
+    Get the full inheritance hierarchy of a class.
+
+    Returns the ancestor chain (parents → engine base) and/or descendant
+    tree (all classes deriving from the target). Works for C++, UE5,
+    Unity (C#), and .NET projects.
+
+    USE THIS TOOL WHEN:
+    - User asks "what does this class inherit from?"
+    - User asks "which classes extend / derive from X?"
+    - User wants to see the full class taxonomy / lineage
+    - Before refactoring a base class, to see all affected subclasses
+    - User asks about interfaces implemented by a class
 
     Args:
         project_path: Absolute path to Scripts/Source folder.
-        class_name:   Class to explore. E.g. "ManagerBattle", "AHSAttributeSet"
-        summarize:    Generate AI 3-line summary if LLM is configured (gdep config llm).
-                      If not configured, returns structure only. Default True.
-        refresh:      Ignore cache and regenerate summary. Default False.
+        class_name:   Target class. E.g. "APlayerCharacter", "ManagerBattle"
+        direction:    "up" = ancestors only, "down" = descendants only,
+                      "both" = full hierarchy (default).
+        max_depth:    Maximum traversal depth (default 10).
     """
-    return _semantics_run(project_path, class_name, summarize, refresh)
+    return await anyio.to_thread.run_sync(
+        lambda: _hierarchy_run(project_path, class_name, direction, max_depth)
+    )
+
+
+@mcp.tool()
+async def find_unused_assets(project_path: str, scan_dir: str | None = None,
+                              max_results: int = 50) -> str:
+    """
+    Find potentially unused assets in the project (Unity/UE5 only).
+
+    Scans the project's asset directory and identifies assets that are
+    not referenced by any other asset. Useful for cleaning up projects
+    and reducing build size.
+
+    USE THIS TOOL WHEN:
+    - User asks "which assets are unused / can I delete?"
+    - User wants to reduce build size or clean up the project
+    - User asks "are there orphan assets?"
+
+    Limitations:
+    - Assets loaded via code (Resources.Load, soft references) may be falsely
+      reported. Always verify before deleting.
+
+    Args:
+        project_path: Absolute path to project root or Scripts/Source folder.
+        scan_dir:     Optional subdirectory to limit the scan.
+        max_results:  Maximum results to show (default 50). Pass 0 for unlimited.
+    """
+    return await anyio.to_thread.run_sync(
+        lambda: _unused_assets_run(project_path, scan_dir, max_results)
+    )
+
+
+@mcp.tool()
+async def query_project_api(project_path: str, query: str,
+                             scope: str = "all",
+                             max_results: int = 20) -> str:
+    """
+    Search the project's code as an API reference (class/method/property lookup).
+
+    Searches all parsed class names, method names, property names, and parameter
+    types. Returns ranked results with full signatures.
+
+    USE THIS TOOL WHEN:
+    - User asks "find all methods related to Health/Damage/Save"
+    - User asks "what classes handle inventory?"
+    - User wants to discover available APIs before writing integration code
+    - User asks "show me methods that return X type"
+
+    Note: Searches PROJECT code only (not engine source).
+
+    Args:
+        project_path: Absolute path to Scripts/Source folder.
+        query:        Search term. E.g. "Health", "Attack", "Save"
+        scope:        "all" (default), "classes", "methods", or "properties"
+        max_results:  Maximum results (default 20). Pass 0 for unlimited.
+    """
+    return await anyio.to_thread.run_sync(
+        lambda: _query_api_run(project_path, query, scope, max_results)
+    )
+
+
+@mcp.tool()
+async def detect_patterns(project_path: str, max_results: int = 30) -> str:
+    """
+    Detect design patterns and architectural patterns used in the project.
+
+    Identifies common game engine patterns (Singleton, Component Composition,
+    GAS, Event/Observer, Replication, State Machine, Object Pooling, etc.)
+    to help understand the codebase architecture.
+
+    USE THIS TOOL WHEN:
+    - User asks "what patterns does this project use?"
+    - User wants an architecture overview before refactoring
+    - User is onboarding to an unfamiliar codebase
+    - User asks "how is this project structured?"
+
+    Args:
+        project_path: Absolute path to Scripts/Source folder.
+        max_results:  Maximum patterns to show (default 30). Pass 0 for unlimited.
+    """
+    return await anyio.to_thread.run_sync(
+        lambda: _detect_patterns_run(project_path, max_results)
+    )
 
 
 # ════════════════════════════════════════════════════════════════
@@ -252,7 +392,7 @@ def explore_class_semantics(project_path: str, class_name: str,
 # ════════════════════════════════════════════════════════════════
 
 @mcp.tool()
-def execute_gdep_cli(args: list[str]) -> str:
+async def execute_gdep_cli(args: list[str]) -> str:
     """
     Execute any gdep CLI command directly. Use this to access features not covered
     by the high-level tools above.
@@ -275,38 +415,40 @@ def execute_gdep_cli(args: list[str]) -> str:
         args: CLI argument list (exclude 'gdep' itself).
               E.g. ["scan", "D:\\Project", "--dead-code"] runs: gdep scan D:\\Project --dead-code
     """
-    try:
-        command = [sys.executable, "-m", "gdep.cli"] + args
+    def _run():
+        try:
+            command = [sys.executable, "-m", "gdep.cli"] + args
 
-        env = os.environ.copy()
-        env["PYTHONIOENCODING"] = "utf-8"
+            env = os.environ.copy()
+            env["PYTHONIOENCODING"] = "utf-8"
 
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            stdin=subprocess.DEVNULL,
-            env=env,
-            timeout=180,
-            cwd=str(_GDEP_ROOT),
-        )
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                stdin=subprocess.DEVNULL,
+                env=env,
+                timeout=180,
+                cwd=str(_GDEP_ROOT),
+            )
 
-        if result.returncode == 0:
-            output = result.stdout or ""
-            if result.stderr and result.stderr.strip():
-                output = (output.rstrip("\n") + "\n\n" if output.strip() else "") + result.stderr.strip()
-            return output or "(No output)"
-        return (
-            f"CLI Error (exit {result.returncode}):\n"
-            f"{result.stderr}\n"
-            f"{result.stdout}"
-        )
+            if result.returncode == 0:
+                output = result.stdout or ""
+                if result.stderr and result.stderr.strip():
+                    output = (output.rstrip("\n") + "\n\n" if output.strip() else "") + result.stderr.strip()
+                return output or "(No output)"
+            return (
+                f"CLI Error (exit {result.returncode}):\n"
+                f"{result.stderr}\n"
+                f"{result.stdout}"
+            )
 
-    except subprocess.TimeoutExpired:
-        return "Error: Command timed out after 180 seconds."
-    except Exception as e:
-        return f"Failed to execute CLI command: {e}"
+        except subprocess.TimeoutExpired:
+            return "Error: Command timed out after 180 seconds."
+        except Exception as e:
+            return f"Failed to execute CLI command: {e}"
+    return await anyio.to_thread.run_sync(_run)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -314,7 +456,7 @@ def execute_gdep_cli(args: list[str]) -> str:
 # ════════════════════════════════════════════════════════════════
 
 @mcp.tool()
-def suggest_test_scope(project_path: str, class_name: str, depth: int = 3) -> str:
+async def suggest_test_scope(project_path: str, class_name: str, depth: int = 3) -> str:
     """
     Suggest which test files need to run when a specific class is modified.
 
@@ -340,7 +482,9 @@ def suggest_test_scope(project_path: str, class_name: str, depth: int = 3) -> st
         class_name:   Class to analyze. E.g. "BattleManager", "APlayerCharacter"
         depth:        Reverse-dependency tracing depth (default 3).
     """
-    return _test_scope_run(project_path, class_name, depth)
+    return await anyio.to_thread.run_sync(
+        lambda: _test_scope_run(project_path, class_name, depth)
+    )
 
 
 # ════════════════════════════════════════════════════════════════
@@ -348,7 +492,7 @@ def suggest_test_scope(project_path: str, class_name: str, depth: int = 3) -> st
 # ════════════════════════════════════════════════════════════════
 
 @mcp.tool()
-def suggest_lint_fixes(project_path: str, rule_ids: list[str] | None = None) -> str:
+async def suggest_lint_fixes(project_path: str, rule_ids: list[str] | None = None) -> str:
     """Run linter and return actionable code fix suggestions for detected anti-patterns.
 
     Goes beyond reporting — provides concrete code snippets for each fixable issue.
@@ -364,7 +508,9 @@ def suggest_lint_fixes(project_path: str, rule_ids: list[str] | None = None) -> 
         project_path: Absolute path to project root or Scripts/Source directory.
         rule_ids: Optional list of rule IDs to filter (e.g. ['UNI-PERF-001']).
     """
-    return _lint_fixes_run(project_path, rule_ids=rule_ids)
+    return await anyio.to_thread.run_sync(
+        lambda: _lint_fixes_run(project_path, rule_ids=rule_ids)
+    )
 
 
 # ════════════════════════════════════════════════════════════════
@@ -372,8 +518,8 @@ def suggest_lint_fixes(project_path: str, rule_ids: list[str] | None = None) -> 
 # ════════════════════════════════════════════════════════════════
 
 @mcp.tool()
-def summarize_project_diff(project_path: str,
-                            commit_ref: str | None = None) -> str:
+async def summarize_project_diff(project_path: str,
+                                  commit_ref: str | None = None) -> str:
     """
     Analyze git diff and summarize the architectural impact of changes.
 
@@ -397,7 +543,9 @@ def summarize_project_diff(project_path: str,
 
     Note: Currently supports Unity / C# projects. For UE5/C++ use inspect_architectural_health.
     """
-    return _diff_summary_run(project_path, commit_ref=commit_ref)
+    return await anyio.to_thread.run_sync(
+        lambda: _diff_summary_run(project_path, commit_ref=commit_ref)
+    )
 
 
 # ════════════════════════════════════════════════════════════════
@@ -405,8 +553,8 @@ def summarize_project_diff(project_path: str,
 # ════════════════════════════════════════════════════════════════
 
 @mcp.tool()
-def analyze_axmol_events(project_path: str,
-                          class_name: str | None = None) -> str:
+async def analyze_axmol_events(project_path: str,
+                                class_name: str | None = None) -> str:
     """
     Scan an Axmol project for EventDispatcher and scheduler callback bindings.
 
@@ -427,7 +575,9 @@ def analyze_axmol_events(project_path: str,
         class_name:   Optional class name to filter results.
                       If None, returns all bindings in the project.
     """
-    return _axmol_events_run(project_path, class_name)
+    return await anyio.to_thread.run_sync(
+        lambda: _axmol_events_run(project_path, class_name)
+    )
 
 
 # ════════════════════════════════════════════════════════════════
@@ -435,8 +585,8 @@ def analyze_axmol_events(project_path: str,
 # ════════════════════════════════════════════════════════════════
 
 @mcp.tool()
-def find_unity_event_bindings(project_path: str,
-                               method_name: str | None = None) -> str:
+async def find_unity_event_bindings(project_path: str,
+                                     method_name: str | None = None) -> str:
     """
     Find Unity Event (UnityEvent / Button.onClick) bindings in prefabs, scenes, and assets.
 
@@ -450,23 +600,25 @@ def find_unity_event_bindings(project_path: str,
         method_name:  Optional filter — only return bindings for this method name.
                       If None, returns all event bindings found.
     """
-    if not _UNITY_EVENTS_AVAILABLE:
-        return (
-            "unity_event_refs module not available yet. "
-            "Use execute_gdep_cli(['scan', project_path]) as a fallback."
-        )
-    try:
-        from gdep.unity_event_refs import build_event_map, format_event_result
-        event_map = build_event_map(project_path)
-        return format_event_result(event_map, method_name) + confidence_footer(ConfidenceTier.HIGH, "Unity persistent-call YAML parsing")
-    except Exception as e:
-        return f"[find_unity_event_bindings] Error: {e}"
+    def _run():
+        if not _UNITY_EVENTS_AVAILABLE:
+            return (
+                "unity_event_refs module not available yet. "
+                "Use execute_gdep_cli(['scan', project_path]) as a fallback."
+            )
+        try:
+            from gdep.unity_event_refs import build_event_map, format_event_result
+            event_map = build_event_map(project_path)
+            return format_event_result(event_map, method_name) + confidence_footer(ConfidenceTier.HIGH, "Unity persistent-call YAML parsing")
+        except Exception as e:
+            return f"[find_unity_event_bindings] Error: {e}"
+    return await anyio.to_thread.run_sync(_run)
 
 
 @mcp.tool()
-def analyze_unity_animator(project_path: str,
-                            controller_name: str | None = None,
-                            detail_level: str = "summary") -> str:
+async def analyze_unity_animator(project_path: str,
+                                  controller_name: str | None = None,
+                                  detail_level: str = "summary") -> str:
     """
     Analyze Unity Animator Controller structure: layers, states, transitions, blend trees.
 
@@ -481,16 +633,18 @@ def analyze_unity_animator(project_path: str,
         detail_level:     "summary" (default) — controller names + layer/state counts.
                           "full" — complete analysis with parameters, blend trees, transitions.
     """
-    if not _UNITY_ANIMATOR_AVAILABLE:
-        return (
-            "unity_animator module not available yet. "
-            "Use execute_gdep_cli(['detect', project_path]) as a fallback."
-        )
-    try:
-        from gdep.unity_animator import analyze_animator
-        return analyze_animator(project_path, controller_name, detail_level=detail_level) + confidence_footer(ConfidenceTier.MEDIUM, "animator YAML parsing")
-    except Exception as e:
-        return f"[analyze_unity_animator] Error: {e}"
+    def _run():
+        if not _UNITY_ANIMATOR_AVAILABLE:
+            return (
+                "unity_animator module not available yet. "
+                "Use execute_gdep_cli(['detect', project_path]) as a fallback."
+            )
+        try:
+            from gdep.unity_animator import analyze_animator
+            return analyze_animator(project_path, controller_name, detail_level=detail_level) + confidence_footer(ConfidenceTier.MEDIUM, "animator YAML parsing")
+        except Exception as e:
+            return f"[analyze_unity_animator] Error: {e}"
+    return await anyio.to_thread.run_sync(_run)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -498,11 +652,11 @@ def analyze_unity_animator(project_path: str,
 # ════════════════════════════════════════════════════════════════
 
 @mcp.tool()
-def analyze_ue5_gas(project_path: str,
-                    class_name: str | None = None,
-                    detail_level: str = "summary",
-                    category: str | None = None,
-                    query: str | None = None) -> str:
+async def analyze_ue5_gas(project_path: str,
+                           class_name: str | None = None,
+                           detail_level: str = "summary",
+                           category: str | None = None,
+                           query: str | None = None) -> str:
     """
     Analyze Gameplay Ability System (GAS) usage in a UE5 project.
 
@@ -535,21 +689,23 @@ def analyze_ue5_gas(project_path: str,
         analyze_ue5_gas(path, query="Dash")            # everything related to Dash
         analyze_ue5_gas(path, detail_level="full")     # full report (only if user explicitly asked)
     """
-    if not _UE5_GAS_AVAILABLE:
-        return (
-            "ue5_gas_analyzer module not available yet. "
-            "Use execute_gdep_cli(['scan', project_path, '--deep']) as a fallback."
-        )
-    try:
-        from gdep.ue5_gas_analyzer import analyze_gas
-        return analyze_gas(project_path, class_name, detail_level, category, query)
-    except Exception as e:
-        return f"[analyze_ue5_gas] Error: {e}"
+    def _run():
+        if not _UE5_GAS_AVAILABLE:
+            return (
+                "ue5_gas_analyzer module not available yet. "
+                "Use execute_gdep_cli(['scan', project_path, '--deep']) as a fallback."
+            )
+        try:
+            from gdep.ue5_gas_analyzer import analyze_gas
+            return analyze_gas(project_path, class_name, detail_level, category, query)
+        except Exception as e:
+            return f"[analyze_ue5_gas] Error: {e}"
+    return await anyio.to_thread.run_sync(_run)
 
 
 @mcp.tool()
-def analyze_ue5_behavior_tree(project_path: str,
-                               asset_name: str | None = None) -> str:
+async def analyze_ue5_behavior_tree(project_path: str,
+                                     asset_name: str | None = None) -> str:
     """
     Extract and describe UE5 Behavior Tree structure from .uasset files.
 
@@ -564,21 +720,23 @@ def analyze_ue5_behavior_tree(project_path: str,
         asset_name:   Optional .uasset filename (without extension) to analyze.
                       If None, scans all BehaviorTree assets found.
     """
-    if not _UE5_AI_AVAILABLE:
-        return (
-            "ue5_ai_analyzer module not available yet. "
-            "Use execute_gdep_cli(['describe', project_path, 'MyAIController']) as a fallback."
-        )
-    try:
-        from gdep.ue5_ai_analyzer import analyze_behavior_tree
-        return analyze_behavior_tree(project_path, asset_name) + confidence_footer(ConfidenceTier.MEDIUM, "binary .uasset pattern match")
-    except Exception as e:
-        return f"[analyze_ue5_behavior_tree] Error: {e}"
+    def _run():
+        if not _UE5_AI_AVAILABLE:
+            return (
+                "ue5_ai_analyzer module not available yet. "
+                "Use execute_gdep_cli(['describe', project_path, 'MyAIController']) as a fallback."
+            )
+        try:
+            from gdep.ue5_ai_analyzer import analyze_behavior_tree
+            return analyze_behavior_tree(project_path, asset_name) + confidence_footer(ConfidenceTier.MEDIUM, "binary .uasset pattern match")
+        except Exception as e:
+            return f"[analyze_ue5_behavior_tree] Error: {e}"
+    return await anyio.to_thread.run_sync(_run)
 
 
 @mcp.tool()
-def analyze_ue5_state_tree(project_path: str,
-                            asset_name: str | None = None) -> str:
+async def analyze_ue5_state_tree(project_path: str,
+                                  asset_name: str | None = None) -> str:
     """
     Extract and describe UE5 StateTree structure from .uasset files.
 
@@ -592,20 +750,22 @@ def analyze_ue5_state_tree(project_path: str,
         project_path: Absolute path to UE5 Content or project root.
         asset_name:   Optional asset filename to analyze. If None, scans all StateTree assets.
     """
-    if not _UE5_AI_AVAILABLE:
-        return "ue5_ai_analyzer module not available yet."
-    try:
-        from gdep.ue5_ai_analyzer import analyze_state_tree
-        return analyze_state_tree(project_path, asset_name) + confidence_footer(ConfidenceTier.MEDIUM, "binary .uasset pattern match")
-    except Exception as e:
-        return f"[analyze_ue5_state_tree] Error: {e}"
+    def _run():
+        if not _UE5_AI_AVAILABLE:
+            return "ue5_ai_analyzer module not available yet."
+        try:
+            from gdep.ue5_ai_analyzer import analyze_state_tree
+            return analyze_state_tree(project_path, asset_name) + confidence_footer(ConfidenceTier.MEDIUM, "binary .uasset pattern match")
+        except Exception as e:
+            return f"[analyze_ue5_state_tree] Error: {e}"
+    return await anyio.to_thread.run_sync(_run)
 
 
 @mcp.tool()
-def analyze_ue5_animation(project_path: str,
-                           asset_name: str | None = None,
-                           asset_type: str = "all",
-                           detail_level: str = "summary") -> str:
+async def analyze_ue5_animation(project_path: str,
+                                 asset_name: str | None = None,
+                                 asset_type: str = "all",
+                                 detail_level: str = "summary") -> str:
     """
     Analyze UE5 animation assets: AnimBlueprint (ABP) and Animation Montages.
 
@@ -632,49 +792,45 @@ def analyze_ue5_animation(project_path: str,
         asset_type:   One of "abp", "montage", or "all" (default).
         detail_level: "summary" (default) or "full".
     """
-    if not _UE5_ANIMATOR_AVAILABLE:
-        return "ue5_animator module not available yet."
-    try:
-        from gdep.ue5_animator import analyze_abp, analyze_montage
+    def _run():
+        if not _UE5_ANIMATOR_AVAILABLE:
+            return "ue5_animator module not available yet."
+        try:
+            from gdep.ue5_animator import analyze_abp, analyze_montage
 
-        def _trim_for_summary(text: str) -> str:
-            """summary 모드: 노이즈 섹션 제거."""
-            keep_sections = {
-                "# AnimBlueprint", "# Animation Montage",
-                "## ", "### States", "### Animation Slots",
-                "### GAS-related", "### Sections", "### Slots",
-                "### Referenced Anim",
-            }
-            out = []
-            skip = False
-            for line in text.splitlines():
-                # 섹션 헤더
-                if line.startswith("###"):
-                    skip = not any(k in line for k in [
-                        "States", "Animation Slots", "GAS-related",
-                        "Sections", "Slots", "Referenced Anim"
-                    ])
-                if not skip:
-                    out.append(line)
-            return "\n".join(out)
+            def _trim_for_summary(text: str) -> str:
+                """summary 모드: 노이즈 섹션 제거."""
+                out = []
+                skip = False
+                for line in text.splitlines():
+                    # 섹션 헤더
+                    if line.startswith("###"):
+                        skip = not any(k in line for k in [
+                            "States", "Animation Slots", "GAS-related",
+                            "Sections", "Slots", "Referenced Anim"
+                        ])
+                    if not skip:
+                        out.append(line)
+                return "\n".join(out)
 
-        if asset_type == "abp":
-            result = analyze_abp(project_path, asset_name)
-        elif asset_type == "montage":
-            result = analyze_montage(project_path, asset_name)
-        else:
-            result = analyze_abp(project_path, asset_name) + \
-                     "\n\n" + analyze_montage(project_path, asset_name)
+            if asset_type == "abp":
+                result = analyze_abp(project_path, asset_name)
+            elif asset_type == "montage":
+                result = analyze_montage(project_path, asset_name)
+            else:
+                result = analyze_abp(project_path, asset_name) + \
+                         "\n\n" + analyze_montage(project_path, asset_name)
 
-        output = result if detail_level == "full" else _trim_for_summary(result)
-        return output + confidence_footer(ConfidenceTier.MEDIUM, "binary .uasset pattern match")
-    except Exception as e:
-        return f"[analyze_ue5_animation] Error: {e}"
+            output = result if detail_level == "full" else _trim_for_summary(result)
+            return output + confidence_footer(ConfidenceTier.MEDIUM, "binary .uasset pattern match")
+        except Exception as e:
+            return f"[analyze_ue5_animation] Error: {e}"
+    return await anyio.to_thread.run_sync(_run)
 
 
 @mcp.tool()
-def analyze_ue5_blueprint_mapping(project_path: str,
-                                   cpp_class: str | None = None) -> str:
+async def analyze_ue5_blueprint_mapping(project_path: str,
+                                         cpp_class: str | None = None) -> str:
     """
     Blueprint <-> C++ detailed mapping for a UE5 project.
 
@@ -713,28 +869,30 @@ def analyze_ue5_blueprint_mapping(project_path: str,
         analyze_ue5_blueprint_mapping(path, "UGameplayAbility")
             -> Full detail for all GA Blueprints with K2_ActivateAbility chains + tags
     """
-    if not _UE5_BP_MAPPING_AVAILABLE:
-        return "ue5_blueprint_mapping module not available."
-    try:
-        from gdep.ue5_blueprint_mapping import build_bp_map, format_full_project_map
-        bp_map = build_bp_map(project_path)
-        if not bp_map.blueprints:
-            return (
-                f"No Blueprint assets found for project at '{project_path}'.\n"
-                "This may happen if:\n"
-                "- The Content folder is empty or missing\n"
-                "- Assets are stored via Git LFS and not pulled yet\n"
-                "- The project path points to Source only (not project root)\n"
-                "Try passing the project root instead of the Source folder."
-            )
-        return format_full_project_map(bp_map, cpp_class)
-    except Exception as e:
-        return f"[analyze_ue5_blueprint_mapping] Error: {e}"
+    def _run():
+        if not _UE5_BP_MAPPING_AVAILABLE:
+            return "ue5_blueprint_mapping module not available."
+        try:
+            from gdep.ue5_blueprint_mapping import build_bp_map, format_full_project_map
+            bp_map = build_bp_map(project_path)
+            if not bp_map.blueprints:
+                return (
+                    f"No Blueprint assets found for project at '{project_path}'.\n"
+                    "This may happen if:\n"
+                    "- The Content folder is empty or missing\n"
+                    "- Assets are stored via Git LFS and not pulled yet\n"
+                    "- The project path points to Source only (not project root)\n"
+                    "Try passing the project root instead of the Source folder."
+                )
+            return format_full_project_map(bp_map, cpp_class)
+        except Exception as e:
+            return f"[analyze_ue5_blueprint_mapping] Error: {e}"
+    return await anyio.to_thread.run_sync(_run)
 
 
 @mcp.tool()
-def get_architecture_advice(project_path: str,
-                             focus_class: str | None = None) -> str:
+async def get_architecture_advice(project_path: str,
+                                   focus_class: str | None = None) -> str:
     """
     Diagnose the architecture of a game project and suggest improvements.
 
@@ -758,20 +916,24 @@ def get_architecture_advice(project_path: str,
                       Impact analysis will pivot on this class.
                       If None, the highest-coupling class is used automatically.
     """
-    try:
-        from gdep.detector import detect
-        from gdep import runner
-        profile = detect(project_path)
-        result = runner.advise(profile, focus_class=focus_class)
-        if not result.ok:
-            return f"[get_architecture_advice] Error: {result.error_message}"
-        return result.stdout
-    except Exception as e:
-        return f"[get_architecture_advice] Error: {e}"
+    def _run():
+        try:
+            from gdep.detector import detect
+            from gdep import runner
+            profile = detect(project_path)
+            result = runner.advise(profile, focus_class=focus_class)
+            if not result.ok:
+                return f"[get_architecture_advice] Error: {result.error_message}"
+            return result.stdout
+        except Exception as e:
+            return f"[get_architecture_advice] Error: {e}"
+    return await anyio.to_thread.run_sync(_run)
 
 
 @mcp.tool()
-def explain_method_logic(project_path: str, class_name: str, method_name: str) -> str:
+async def explain_method_logic(project_path: str, class_name: str, method_name: str,
+                                include_source: bool = False,
+                                max_source_chars: int = 4000) -> str:
     """
     Extract and summarize the internal control flow logic of a specific method.
 
@@ -790,17 +952,25 @@ def explain_method_logic(project_path: str, class_name: str, method_name: str) -
     - Numbered list of Guard / Branch / Loop / Always control flow items
     - Each item shows the condition and 1-2 key calls made in that branch
     - Source file reference for quick navigation
+    - Method body source code (when include_source=True)
 
     Args:
-        project_path: Absolute path to the project root or source folder.
-        class_name:   Class containing the method. E.g. "ManagerBattle", "AHSCharacterBase"
-        method_name:  Method to explain. E.g. "PlayHand", "ActivateAbility", "BeginPlay"
+        project_path:     Absolute path to the project root or source folder.
+        class_name:       Class containing the method. E.g. "ManagerBattle"
+        method_name:      Method to explain. E.g. "PlayHand", "ActivateAbility"
+        include_source:   Also return the actual method body code. Default False.
+                          Use when the control flow summary isn't enough context.
+        max_source_chars: Max chars for the method body (default 4000).
     """
-    return _explain_logic_run(project_path, class_name, method_name)
+    return await anyio.to_thread.run_sync(
+        lambda: _explain_logic_run(project_path, class_name, method_name,
+                                   include_source, max_source_chars)
+    )
 
 
 @mcp.tool()
-def find_method_callers(project_path: str, class_name: str, method_name: str) -> str:
+async def find_method_callers(project_path: str, class_name: str, method_name: str,
+                               max_results: int = 30) -> str:
     """
     Find all methods that call a specific method (reverse call graph).
 
@@ -812,19 +982,22 @@ def find_method_callers(project_path: str, class_name: str, method_name: str) ->
 
     Returns:
     - List of CallerClass::CallerMethod with call conditions
-    - Caller count
+    - Caller count and pagination info
 
     Args:
         project_path: Absolute path to Scripts/Source folder.
         class_name:   Class containing the method. E.g. "ManagerBattle"
         method_name:  Method to find callers of. E.g. "PlayHand"
+        max_results:  Maximum callers to return (default 30). Pass 0 for unlimited.
     """
-    return _callers_run(project_path, class_name, method_name)
+    return await anyio.to_thread.run_sync(
+        lambda: _callers_run(project_path, class_name, method_name, max_results)
+    )
 
 
 @mcp.tool()
-def find_call_path(project_path: str, from_class: str, from_method: str,
-                   to_class: str, to_method: str, depth: int = 10) -> str:
+async def find_call_path(project_path: str, from_class: str, from_method: str,
+                          to_class: str, to_method: str, depth: int = 10) -> str:
     """
     Find the shortest call path between two methods (A to B connection trace).
     **C#/Unity projects only** — C++ and UE5 projects are not supported yet.
@@ -847,7 +1020,45 @@ def find_call_path(project_path: str, from_class: str, from_method: str,
         to_method:    Target method. E.g. "PlayHand"
         depth:        Max search depth (default 10).
     """
-    return _path_run(project_path, from_class, from_method, to_class, to_method, depth)
+    return await anyio.to_thread.run_sync(
+        lambda: _path_run(project_path, from_class, from_method, to_class, to_method, depth)
+    )
+
+
+# ════════════════════════════════════════════════════════════════
+# SOURCE CODE ACCESS TOOL
+# ════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+async def read_class_source(project_path: str, class_name: str,
+                             max_chars: int = 8000,
+                             method_name: str | None = None) -> str:
+    """
+    Return the actual source code of a class or a specific method within it.
+
+    USE THIS TOOL WHEN:
+    - You need to read actual implementation after identifying a class with explore_class_semantics
+    - You want to understand business logic, not just structure (fields/methods list)
+    - You want to see field initializations, exception handling, async patterns, or state mutations
+    - You want to understand WHY code is written a certain way (design intent, context)
+    - method_name is provided: returns ONLY that method's body (token-efficient)
+
+    This tool bridges the gap between gdep's structural analysis and actual code understanding.
+    Use after: explore_class_semantics, find_method_callers, analyze_impact_and_risk
+
+    Args:
+        project_path: Absolute path to Scripts/Source folder (or project root).
+        class_name:   Class to read. E.g. "BattleManager", "AHSCharacterBase"
+        max_chars:    Maximum characters to return (default 8000, max recommended 15000).
+        method_name:  Optional — if provided, returns ONLY this method's body.
+                      Much more token-efficient. E.g. "PlayHand", "BeginPlay"
+
+    Returns:
+        Source code as text. With method_name: returns only that method in a code block.
+    """
+    return await anyio.to_thread.run_sync(
+        lambda: _read_source_run(project_path, class_name, max_chars, method_name)
+    )
 
 
 # ════════════════════════════════════════════════════════════════

@@ -80,21 +80,25 @@ export interface InitResult {
   message:        string
 }
 
+export interface BrowseResult { parent: string; dirs: string[]; is_root: boolean }
+
 export const projectApi = {
+  browse:     (path = '') =>
+    api.get<BrowseResult>('/project/browse', { params: { path } }).then(r => r.data),
   detect:     (path: string) =>
     api.get<ProjectInfo>('/project/detect', { params: { path } }).then(r => r.data),
   scan:       (path: string, top = 20, circular = true, dead_code = false, deep = false, include_refs = false) =>
     api.post<ScanResult>('/project/scan', { path, top, circular, dead_code, deep, include_refs }).then(r => r.data),
   describe:   (path: string, class_name: string) =>
     api.post<DescribeResult>('/project/describe', { path, class_name }).then(r => r.data),
-  readSource: (path: string, class_name: string, max_chars = 8000) =>
-    api.post<{ content: string }>('/project/read_source', { path, class_name, max_chars }).then(r => r.data),
+  readSource: (path: string, class_name: string, max_chars = 8000, method_name?: string) =>
+    api.post<{ content: string }>('/project/read_source', { path, class_name, max_chars, method_name: method_name ?? null }).then(r => r.data),
   impact:     (path: string, target_class: string, depth = 3) =>
     api.post<ImpactResult>('/project/impact', { path, target_class, depth }).then(r => r.data),
   lint:       (path: string) =>
     api.post<LintResult>('/project/lint', { path }).then(r => r.data),
-  explainMethodLogic: (path: string, class_name: string, method_name: string) =>
-    api.post<ExplainMethodResult>('/project/explain-method-logic', { path, class_name, method_name }).then(r => r.data),
+  explainMethodLogic: (path: string, class_name: string, method_name: string, include_source = false) =>
+    api.post<ExplainMethodResult>('/project/explain-method-logic', { path, class_name, method_name, include_source }).then(r => r.data),
   getContext: (path: string) =>
     api.get<ProjectContextResult>('/project/context', { params: { path } }).then(r => r.data),
   init:       (path: string, force = false) =>
@@ -347,4 +351,39 @@ export const analysisApi = {
 
   diffSummary: (path: string, commit?: string) =>
     api.post<{ report: string }>('/project/diff-summary', { path, commit: commit ?? null }).then(r => r.data),
+}
+
+// ── Analysis API (Phase 2: 신규 MCP 도구 대응) ───────────────
+
+export const analysisNewApi = {
+  hierarchy: (path: string, class_name: string, direction = 'both', max_depth = 10) =>
+    api.post<{ result: string }>('/analysis/hierarchy', { path, class_name, direction, max_depth })
+       .then(r => r.data.result),
+
+  unusedAssets: (path: string, scan_dir?: string, max_results = 50) =>
+    api.post<{ result: string }>('/analysis/unused-assets', { path, scan_dir: scan_dir ?? null, max_results })
+       .then(r => r.data.result),
+
+  queryApi: (path: string, query: string, scope = 'all', max_results = 20) =>
+    api.post<{ result: string }>('/analysis/query-api', { path, query, scope, max_results })
+       .then(r => r.data.result),
+
+  detectPatterns: (path: string, max_results = 30) =>
+    api.post<{ result: string }>('/analysis/detect-patterns', { path, max_results })
+       .then(r => r.data.result),
+
+  methodCallers: (path: string, class_name: string, method_name: string, max_results = 30) =>
+    api.post<{ result: string }>('/analysis/method-callers', { path, class_name, method_name, max_results })
+       .then(r => r.data.result),
+
+  callPath: (path: string, from_class: string, from_method: string,
+             to_class: string, to_method: string, depth = 10) =>
+    api.post<{ result: string }>('/analysis/call-path',
+      { path, from_class, from_method, to_class, to_method, depth })
+       .then(r => r.data.result),
+
+  exploreSemantics: (path: string, class_name: string, compact = true, include_source = false) =>
+    api.post<{ result: string }>('/analysis/explore-semantics',
+      { path, class_name, compact, include_source })
+       .then(r => r.data.result),
 }

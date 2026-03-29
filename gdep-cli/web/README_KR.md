@@ -12,6 +12,7 @@ gdep Web UI는 gdep CLI를 로컬 웹 앱으로 감싸, 터미널 출력 대신 
 - 저장할 때마다 자동으로 분석하는 실시간 파일 감시 패널
 - 실제 코드베이스에 대해 툴 호출이 가능한 AI 채팅 에이전트
 - 엔진 전용 탐색기 (UE5 GAS, Blueprint 매핑, Animator, BehaviorTree …)
+- 패턴 감지, 미사용 에셋 스캔, API 레벨 코드 검색
 
 **스택:** React 19 + TypeScript + Vite + TailwindCSS (프론트엔드) · FastAPI + Python (백엔드)
 
@@ -88,6 +89,7 @@ IDE 없이 프로젝트의 모든 클래스를 탐색합니다.
 - 테스트 범위 제안 — 실행해야 할 테스트 파일
 - 수정 제안이 포함된 Lint 이슈 인라인 표시
 - UE5 Blueprint↔C++ 매핑 상세 정보
+- **API 검색 모드** — 토글 전환 후 클래스·메서드·프로퍼티 전체를 키워드로 검색, 관련도 점수 순 정렬. 스코프 필터: 전체 / 클래스 / 메서드 / 프로퍼티
 
 #### Method Logic 상세
 
@@ -112,6 +114,8 @@ IDE 없이 프로젝트의 모든 클래스를 탐색합니다.
 - 모든 노드를 드릴다운하여 호출 트리 확장
 - LLM 설명 패널 — "이 흐름이 무엇을 하는가?" 질문 가능
 - C++→Blueprint 경계 교차 지원 (UE5)
+- **역호출 패널** — 노드 선택 후 "누가 호출하나?" 버튼 클릭 시 프로젝트 전체에서 해당 메서드를 호출하는 모든 위치 표시
+- **경로 탐색 패널** — From(클래스.메서드) → To(클래스.메서드) 입력 후 두 메서드를 잇는 호출 체인 탐색 (C#/Unity)
 
 ### 3. 의존성 뷰
 
@@ -120,9 +124,11 @@ IDE 없이 프로젝트의 모든 클래스를 탐색합니다.
 - 순환 참조 감지 및 사이클 경로 하이라이트
 - 높은 결합도 클래스 순위
 - Dead Code 목록
-- 상속 계층 그래프
+- **상속 계층** — 전체 계층 트리 모드 추가. 방향 토글(Up / Down / Both)로 상위·하위 클래스 방향 선택. ReactFlow 그래프와 텍스트 결과 패널 병행 표시
 - 프로젝트 전반 Prefab / Blueprint 사용 추적
 - 임의 클래스에 대한 원클릭 영향 분석 및 테스트 범위
+- **패턴 탭** (전 엔진) — God Object, 싱글턴 남용, 강결합 체인 등 아키텍처 안티패턴 감지
+- **미사용 에셋 탭** (Unity + UE5) — 코드 어디에서도 참조되지 않는 에셋 스캔. 스캔 디렉터리 및 결과 수 설정 가능
 
 ### 4. Watch 패널
 
@@ -152,17 +158,20 @@ IDE 없이 프로젝트의 모든 클래스를 탐색합니다.
 |------|------|---------|
 | Unity | **UnityEvent 바인딩** | 코드 검색으로는 보이지 않는 인스펙터 와이어드 퍼시스턴트 호출 |
 | Unity | **Animator 분석** | AnimatorController의 상태, 전환, 블렌드 트리 |
+| Unity | **미사용 에셋** | 프로젝트 코드에서 참조되지 않는 에셋 |
 | UE5 | **GAS 탐색기** | Abilities, Effects, Attributes, Tags, ASC 소유자 — `detail_level`, `category`(태그 접두사), `query`(키워드) 필터 지원 |
 | UE5 | **Blueprint 매핑** | C++ 클래스 → BP 구현체, K2 오버라이드, 이벤트, 변수 |
 | UE5 | **Animation 분석** | ABP 상태, Montage 슬롯, GAS Notify |
 | UE5 | **BehaviorTree** | 태스크/데코레이터/서비스 노드가 있는 BT 에셋 구조 |
 | UE5 | **StateTree** | StateTree (UE 5.2+) 상태 + 전환 맵 |
+| UE5 | **미사용 에셋** | 프로젝트 코드에서 참조되지 않는 에셋 |
 | Axmol | **이벤트 바인딩** | EventDispatcher 및 스케줄러 바인딩 맵 |
+| 전 엔진 | **패턴** | 코드베이스 전체 아키텍처 안티패턴 감지 |
 
 모든 엔진 분석 결과에는 **신뢰도 뱃지**(🟢 HIGH / 🟡 MEDIUM / 🔴 LOW)가 표시됩니다.
 데이터 소스(소스 코드 직접 분석 vs. 바이너리 `.uasset` 패턴 매칭)에 따라 신뢰도가 달라집니다.
 
-### UE5 GAS 필터 옵션 (신규)
+### UE5 GAS 필터 옵션
 
 | 파라미터 | 설명 | 예시 |
 |----------|------|------|
@@ -224,6 +233,12 @@ IDE 없이 프로젝트의 모든 클래스를 탐색합니다.
 | unity | `GET /unity/refs` | 모든 Prefab/Scene 참조 |
 | ue5 | `GET /ue5/blueprint_refs` | 모든 Blueprint 참조 |
 | ue5 | `GET /ue5/blueprint_mapping` | C++↔BP 상세 매핑 |
+| analysis | `POST /analysis/hierarchy` | 전체 클래스 상속 트리 (up/down/both) |
+| analysis | `POST /analysis/unused-assets` | 미사용 에셋 스캔 |
+| analysis | `POST /analysis/query-api` | 클래스·메서드·프로퍼티 API 레벨 키워드 검색 |
+| analysis | `POST /analysis/detect-patterns` | 아키텍처 안티패턴 감지 |
+| analysis | `POST /analysis/method-callers` | 메서드 호출자 전체 탐색 |
+| analysis | `POST /analysis/call-path` | 두 메서드 간 호출 경로 탐색 (C#/Unity) |
 | agent | `POST /agent/run` | SSE 스트리밍 AI 에이전트 |
 | agent | `POST /agent/reset` | 에이전트 세션 초기화 |
 | llm | `POST /llm/analyze` | LLM 흐름 설명 |
@@ -247,6 +262,8 @@ web/
 │       ├── engine.py            # 엔진별 분석기 (GAS 필터 포함)
 │       ├── unity.py             # Unity 참조 쿼리
 │       ├── ue5.py               # UE5 Blueprint 쿼리
+│       ├── analysis.py          # hierarchy / unused-assets / query-api
+│       │                        # detect-patterns / method-callers / call-path
 │       ├── agent.py             # SSE 에이전트 (툴 호출)
 │       ├── llm.py               # LLM 제공자 브릿지
 │       └── watch.py             # WebSocket 파일 감시자
@@ -257,11 +274,12 @@ web/
         ├── App.tsx              # 탭 레이아웃
         ├── store.tsx            # 전역 상태 + 캐싱
         ├── api/
-        │   └── client.ts        # 타입이 지정된 API 함수
+        │   └── client.ts        # 타입이 지정된 API 함수 (analysisNewApi 포함)
         ├── components/
         │   ├── Sidebar.tsx      # 프로젝트 설정 패널 + Context 모달
-        │   ├── ClassBrowser.tsx # 클래스 탐색기 + Method Logic + 상속 체인
-        │   ├── DependencyView.tsx  # 의존성 탭 + GAS 필터
+        │   ├── ClassBrowser.tsx # 클래스 탐색기 + Method Logic + API 검색 모드
+        │   ├── DependencyView.tsx  # 의존성 탭 + 패턴 + 미사용 에셋
+        │   ├── FlowGraph.tsx    # 호출 그래프 + 역호출 + 경로 탐색
         │   ├── WatchPanel.tsx   # 실시간 파일 감시자
         │   └── ConfidenceBadge.tsx  # HIGH/MEDIUM/LOW 신뢰도 pill 뱃지
         └── tabs/

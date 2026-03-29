@@ -85,7 +85,7 @@ def _split_src_tag(src: str) -> tuple[str, str]:
 def _cache_path(src: str, deep: bool, tag: str = "") -> Path:
     clean_src, _ = _split_src_tag(src)
     cache_dir = Path(clean_src).resolve().parent / ".gdep" / "cache"
-    cache_dir.mkdir(exist_ok=True)
+    cache_dir.mkdir(parents=True, exist_ok=True)
     suffix = f"_{tag}" if tag else ""
     prefix = "deep" if deep else "fast"
     return cache_dir / f"ue5_scan_{prefix}{suffix}.json"
@@ -236,6 +236,21 @@ def scan(src: str, top: int = 20, circular: bool = True, dead_code: bool = False
             out_data = dict(data)
             out_data["coupling"] = active_coupling[:top]
             return RunResult(ok=True, stdout=json.dumps(out_data, indent=2, ensure_ascii=False), data=out_data)
+
+        if fmt == "dot":
+            lines = ['digraph coupling {', '  rankdir=LR;', '  node [shape=box];']
+            for item in active_coupling:
+                label = f"{item['name']}\\n(score: {item['score']})"
+                lines.append(f'  "{item["name"]}" [label="{label}"];')
+            lines.append('}')
+            return RunResult(ok=True, stdout="\n".join(lines), data=data)
+
+        if fmt == "mermaid":
+            lines = ['graph TD']
+            for item in active_coupling:
+                safe = item['name'].replace('-', '_')
+                lines.append(f'  {safe}["{item["name"]} ({item["score"]})"]')
+            return RunResult(ok=True, stdout="\n".join(lines), data=data)
 
         total_files = data["summary"]["fileCount"]
         class_count = data["summary"]["classCount"]
@@ -591,7 +606,7 @@ def lint(src: str, fmt: str = "console") -> RunResult:
         proj = _get_project(src, deep=True)
 
         linter = Linter()
-        results = linter.lint_ue5(proj)
+        results = linter.lint_ue5(proj, source_path=src)
 
         if fmt == "json":
             # Convert LintResult objects to dicts

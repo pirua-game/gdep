@@ -59,7 +59,7 @@ npm install -g gdep-mcp
 }
 ```
 
-設定完了。Claude · Cursor · Gemini が毎会話でゲームエンジン特化の **19 個** のツールを使えます。
+設定完了。Claude · Cursor · Gemini が毎会話でゲームエンジン特化の **26 個** のツールを使えます。
 
 ### MCP が変えること
 
@@ -68,20 +68,27 @@ npm install -g gdep-mcp
 gdep MCP:   直接依存 2 件 · 間接 200 件以上の UI クラス · アセット: prefabs/UI/combat.prefab
 ```
 
-### MCP ツール一覧（19 個）
+### MCP ツール一覧（26 個）
 
 | ツール | 使用タイミング |
 |--------|-------------|
 | `get_project_context` | **必ず最初に呼び出す** — プロジェクト全体概要 |
 | `analyze_impact_and_risk` | クラス・メソッド変更前の安全確認（`method_name=` でメソッドレベル呼び出し元追跡; `detail_level="summary"` で高速要約） |
-| `explain_method_logic` | 単一メソッドの内部制御フロー要約 — Guard/Branch/Loop/Always。C++ namespace 関数対応 |
+| `explain_method_logic` | 単一メソッドの内部制御フロー要約 — Guard/Branch/Loop/Always。C++ namespace 関数対応。`include_source=True` でメソッド本文を追加 |
 | `trace_gameplay_flow` | C++ → Blueprint 呼び出しチェーン追跡 |
 | `inspect_architectural_health` | 技術的負債の全体診断 |
-| `explore_class_semantics` | 未知クラスの詳細把握 |
+| `explore_class_semantics` | 未知クラスの詳細把握。デフォルト `compact=True` でAI友好的出力（~4–8 KB）；`include_source=True` でソースコード追加 |
 | `suggest_test_scope` | クラス変更後に実行すべきテストファイル自動特定 |
 | `suggest_lint_fixes` | lint 問題 + コード修正提案（dry-run） |
 | `summarize_project_diff` | git diff をアーキテクチャ観点で要約 |
 | `get_architecture_advice` | プロジェクト総合診断 + LLM アーキテクチャアドバイス |
+| `find_method_callers` | 逆方向コールグラフ — 特定のメソッドを呼び出すすべてのメソッド |
+| `find_call_path` | 2つのメソッド間の最短呼び出しパス（A → B、**C#/Unity のみ**） |
+| `find_class_hierarchy` | クラス継承階層ツリー — 祖先（親チェーン）+ 子孫（サブクラスツリー） |
+| `read_class_source` | クラス全体または特定メソッドのソースコードを返す。`method_name=` で対象メソッド本文のみ取得（トークン節約） |
+| `find_unused_assets` | 未参照アセット検出 — Unity GUID スキャン / UE5 バイナリパス参照スキャン |
+| `query_project_api` | クラス・メソッド・プロパティ名でプロジェクト API を検索（関連度スコアベース） |
+| `detect_patterns` | コードベースのデザインパターン検出（シングルトン、サブシステム、GAS、コンポーネント構成など） |
 | `execute_gdep_cli` | CLI 全機能への直接アクセス |
 | `find_unity_event_bindings` | Inspector 連結メソッド（コード検索不可領域） |
 | `analyze_unity_animator` | Animator ステートマシン構造 |
@@ -179,7 +186,7 @@ run.bat              # Windows — バックエンド + フロントエンドを
 | `method-impact` | 特定メソッドの呼び出し元を逆追跡 | メソッド変更前の影響範囲把握 |
 | `test-scope` | クラス変更後に実行すべきテストファイル | マージ前、CI 計画 |
 | `watch` | リアルタイムファイル変更監視 (impact+test+lint) | 開発中の常時モニタリング |
-| `lint` | ゲーム特化アンチパターン 16 個（+ `--fix`） | PR 品質チェック |
+| `lint` | ゲーム特化アンチパターン 19 個（+ `--fix`） | PR 品質チェック |
 | `advise` | 全体アーキテクチャ診断 + LLM アドバイス | アーキテクチャレビュー |
 | `graph` | 依存関係グラフ export | ドキュメント化、可視化 |
 | `diff` | コミット前後の依存比較 | PR レビュー、CI ゲート |

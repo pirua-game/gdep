@@ -54,7 +54,7 @@ pip install gdep "mcp[cli]"
 
 ---
 
-## 🛠 工具列表（19个）
+## 🛠 工具列表（26个）
 
 ### 上下文工具
 
@@ -62,19 +62,26 @@ pip install gdep "mcp[cli]"
 |------|------|
 | `get_project_context` | **会话开始时首先调用** — 项目整体概览 |
 
-### 高层意图工具（9个）
+### 高层意图工具（14个）
 
 | 工具 | 说明 |
 |------|------|
 | `analyze_impact_and_risk` | 修改类或方法前的影响范围 + 代码检查。`method_name=` 追踪方法级调用方；`detail_level="summary"` 快速摘要；`query=` 过滤结果 |
-| `explain_method_logic` | 单个方法内部控制流摘要 — Guard/Branch/Loop/Always 5~10 行。支持 C++ namespace 函数 |
+| `explain_method_logic` | 单个方法内部控制流摘要 — Guard/Branch/Loop/Always 5~10 行。支持 C++ namespace 函数。`include_source=True` 附加方法体源码 |
 | `trace_gameplay_flow` | 方法调用链追踪 + 源代码 |
 | `inspect_architectural_health` | 耦合度/循环引用/死代码/反模式 |
-| `explore_class_semantics` | 类结构 + AI 三行摘要 |
+| `explore_class_semantics` | 类结构 + AI 三行摘要。默认 `compact=True` 将输出限制在 ~4–8 KB；`include_source=True` 附加源代码 |
 | `suggest_test_scope` | 修改类后需运行的测试文件自动推算（支持 CI JSON 输出） |
 | `suggest_lint_fixes` | lint 问题 + 代码修复建议（dry-run，不修改文件） |
 | `summarize_project_diff` | 从架构角度汇总 git diff — 循环引用增减、高耦合警告 |
 | `get_architecture_advice` | scan+lint+impact 综合 → 结构化报告或 LLM 架构建议 |
+| `find_method_callers` | 反向调用图 — 调用特定方法的所有方法 |
+| `find_call_path` | 两个方法间的最短调用路径（A → B，**仅限 C#/Unity**） |
+| `find_class_hierarchy` | 类继承层次树 — 祖先（父链）+ 子孙（子类树）。`direction=up/down/both` |
+| `read_class_source` | 返回类或特定方法的源代码。`method_name=` 仅返回该方法体（节省 token）；`max_chars=` 控制大小 |
+| `find_unused_assets` | 未引用资源检测 — Unity GUID 扫描 / UE5 二进制路径引用扫描 |
+| `query_project_api` | 按类/方法/属性名搜索项目 API 参考。`scope=all/classes/methods/properties` |
+| `detect_patterns` | 检测代码库中的设计模式（单例、子系统、GAS、组件组合等） |
 
 ### Raw CLI 访问
 

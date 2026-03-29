@@ -23,7 +23,8 @@ from gdep.detector import detect
 def run(project_path: str, class_name: str,
         method_name: str | None = None,
         detail_level: str = "full",
-        query: str | None = None) -> str:
+        query: str | None = None,
+        max_results: int = 0) -> str:
     """
     Analyze the impact and risks of modifying a specific class (or method) before making changes.
 
@@ -48,6 +49,8 @@ def run(project_path: str, class_name: str,
                       "full"    — full impact tree + all lint issues (default).
         query:        Optional class/pattern filter. Only results containing this string
                       are included. Useful for narrowing large codebases.
+        max_results:  Maximum number of lint issues to show (default 0 = auto:
+                      5 for summary, 20 for full). Useful for controlling output size.
 
     Returns:
         A report containing:
@@ -55,6 +58,9 @@ def run(project_path: str, class_name: str,
         - Method-level callers (if method_name is provided)
         - Lint results: anti-patterns found in or around this class
     """
+    if not class_name or not class_name.strip():
+        return "[analyze_impact_and_risk] Error: class_name must not be empty."
+
     try:
         profile = detect(project_path)
         sections: list[str] = []
@@ -88,6 +94,9 @@ def run(project_path: str, class_name: str,
             except Exception as me:
                 sections.append(f"\n## Method-Level Impact\nError: {me}")
 
+        # ── Asset Cross-Reference (Source ↔ Asset) ──────────────────
+        _append_asset_crossref(sections, profile, class_name, is_summary)
+
         # ── Lint Analysis ────────────────────────────────────────────
         lint_result = runner.lint(profile, fmt="json")
         sections.append("\n## Lint / Anti-pattern Scan")
@@ -107,7 +116,7 @@ def run(project_path: str, class_name: str,
                                   or q in i.get("message", "").lower()
                                   or q in i.get("rule_id", "").lower()]
 
-                limit = 5 if is_summary else 20
+                limit = max_results if max_results > 0 else (5 if is_summary else 20)
                 if not all_issues:
                     sections.append("✓ No anti-patterns detected.")
                 else:
@@ -150,3 +159,70 @@ def _summarize_impact(impact_text: str) -> str:
     suffix = f"\n... and {total - 5} more affected classes (use detail_level='full' to see all)" if total > 5 else ""
     header = f"Affected classes: {total}\n"
     return header + preview + suffix
+
+
+def _append_asset_crossref(sections: list[str], profile, class_name: str,
+                            is_summary: bool) -> None:
+    """Add Source ↔ Asset cross-reference section if applicable."""
+    from gdep.detector import ProjectKind
+
+    try:
+        if profile.kind == ProjectKind.UNREAL:
+            try:
+                from gdep.ue5_blueprint_mapping import build_bp_map
+                src = str(profile.source_dirs[0]) if profile.source_dirs else str(profile.root)
+                bp_map = build_bp_map(src)
+                if not bp_map:
+                    return
+
+                # Find Blueprints that reference this C++ class
+                matching_bps: list[str] = []
+                for bp_path, bp_info in bp_map.blueprints.items():
+                    cpp_parent = getattr(bp_info, 'cpp_parent', '')
+                    if not cpp_parent:
+                        continue
+                    # Match with or without UE prefix (U/A/F/I)
+                    def _strip_ue_prefix(n: str) -> str:
+                        return n[1:] if len(n) > 1 and n[0] in 'UAFI' else n
+                    if (cpp_parent == class_name or
+                        _strip_ue_prefix(cpp_parent) == _strip_ue_prefix(class_name)):
+                        matching_bps.append(bp_path)
+
+                if matching_bps:
+                    sections.append("\n## Blueprint Assets Referencing This Class")
+                    if is_summary:
+                        sections.append(f"Found **{len(matching_bps)}** Blueprint(s) "
+                                       f"using {class_name} as parent class.")
+                    else:
+                        for bp in matching_bps[:20]:
+                            bp_name = bp.split('/')[-1] if '/' in bp else bp
+                            sections.append(f"  └── {bp_name}  ({bp})")
+                        if len(matching_bps) > 20:
+                            sections.append(f"  ... {len(matching_bps) - 20} more")
+            except ImportError:
+                pass
+
+        elif profile.kind == ProjectKind.UNITY:
+            try:
+                from gdep import unity_refs
+                src = str(profile.source_dirs[0]) if profile.source_dirs else str(profile.root)
+                ref_map = unity_refs.build_ref_map(src)
+                if not ref_map:
+                    return
+
+                ref = ref_map.get(class_name)
+                if ref and ref.usages:
+                    sections.append("\n## Unity Assets Referencing This Class")
+                    if is_summary:
+                        sections.append(f"Found **{len(ref.usages)}** asset reference(s) "
+                                       f"to {class_name}.")
+                    else:
+                        for usage in sorted(ref.usages)[:20]:
+                            sections.append(f"  └── {usage}")
+                        if len(ref.usages) > 20:
+                            sections.append(f"  ... {len(ref.usages) - 20} more")
+            except ImportError:
+                pass
+
+    except Exception:
+        pass  # Non-critical — silently skip

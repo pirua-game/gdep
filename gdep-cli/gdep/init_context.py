@@ -37,8 +37,9 @@ reconnaissance drone for your codebase. It scans source files and engine assets
 to tell you *what exists* and *how things connect*, so the AI agent doesn't
 have to read every file.
 
-- **What gdep knows:** classes, dependencies, call graphs, Blueprint↔C++ bridges,
-  GAS flows, Animator state machines, engine asset references (prefabs, Blueprints, .uasset)
+- **What gdep knows:** classes, inheritance hierarchies, dependencies, call graphs,
+  Blueprint↔C++ bridges, GAS flows, Animator state machines, engine asset references
+  (prefabs, Blueprints, .uasset), design patterns, unused assets, API search
 - **What gdep does NOT know:** runtime behavior, Blueprint visual-script internals,
   GameplayEffect numerical values, or "why does this crash"
 
@@ -64,6 +65,11 @@ have to read every file.
 
 5. **Output volume control:** Some tools offer summary vs full output modes.
    Use summary mode first to save tokens, then request full output only when needed.
+   - `explore_class_semantics(compact=True)` — default. Limits fields/methods/refs
+     shown per section (15/25/10). Use `compact=False` only when the full listing is needed.
+   - `explore_class_semantics(include_source=True)` — appends source code after structure.
+   - `explain_method_logic(include_source=True)` — appends method body after control flow.
+   - `read_class_source(method_name="Foo")` — returns only that method's body (token-efficient).
    - `trace_gameplay_flow(summary=True)` — compact 2-level tree + stats (< 500 tokens).
      Full mode can produce 2000+ tokens at depth 5.
    - `analyze_impact_and_risk(detail_level="summary")` — quick count vs full blast-radius.
@@ -105,21 +111,26 @@ have to read every file.
 _QUICK_REF_COMMON = """\
 ## Quick Reference
 Common: `explore_class_semantics` · `trace_gameplay_flow` · `analyze_impact_and_risk` · `inspect_architectural_health` · `get_architecture_advice` · `explain_method_logic` · `suggest_lint_fixes` · `summarize_project_diff`
+Source code: `read_class_source(path, cls)` — full class source · `read_class_source(path, cls, method_name=m)` — single method body · `explore_class_semantics(path, cls, include_source=True)` — structure + source
 Method-level: `find_method_callers(path, cls, method)` — who calls this method · `find_call_path(path, fromCls, fromMethod, toCls, toMethod)` — shortest A→B path · `analyze_impact_and_risk(path, cls, method_name=m)` — callers + impact tree
+Structure: `find_class_hierarchy(path, cls)` — inheritance tree (ancestors + descendants) · `query_project_api(path, "keyword")` — search project API by name · `detect_patterns(path)` — detect architectural patterns
+Assets: `find_unused_assets(path)` — find unreferenced assets (Unity/UE5)
 
 """
 
 _SESSION_FLOW_UE5 = """\
 ## UE5 Tools & Session Flow
 UE5: `analyze_ue5_gas` · `analyze_ue5_blueprint_mapping` · `analyze_ue5_behavior_tree` · `analyze_ue5_state_tree` · `analyze_ue5_animation`
+Discovery: `find_class_hierarchy` · `query_project_api` · `detect_patterns` · `find_unused_assets`
 
 ```
 # New UE5 session
 1. get_project_context(path)
 2. explore_class_semantics(path, "AMyChar")
-3. analyze_ue5_gas(path)
-4. analyze_ue5_blueprint_mapping(path, "AMyChar")
-5. trace_gameplay_flow(path, "AMyChar", "BeginPlay")
+3. find_class_hierarchy(path, "AMyChar")
+4. analyze_ue5_gas(path)
+5. analyze_ue5_blueprint_mapping(path, "AMyChar")
+6. trace_gameplay_flow(path, "AMyChar", "BeginPlay")
 ```
 
 """
@@ -127,14 +138,16 @@ UE5: `analyze_ue5_gas` · `analyze_ue5_blueprint_mapping` · `analyze_ue5_behavi
 _SESSION_FLOW_UNITY = """\
 ## Unity Tools & Session Flow
 Unity: `find_unity_event_bindings` · `analyze_unity_animator`
+Discovery: `find_class_hierarchy` · `query_project_api` · `detect_patterns` · `find_unused_assets`
 
 ```
 # New Unity session
 1. get_project_context(path)
 2. explore_class_semantics(path, "GameManager")
-3. find_unity_event_bindings(path)
-4. analyze_unity_animator(path)
-5. analyze_impact_and_risk(path, "ClassName")
+3. find_class_hierarchy(path, "GameManager")
+4. find_unity_event_bindings(path)
+5. analyze_unity_animator(path)
+6. analyze_impact_and_risk(path, "ClassName")
 ```
 
 """
@@ -199,6 +212,10 @@ Full class structure: fields, methods, dependencies, asset usages.
 | class_name* | str | — | e.g. "BattleManager", "AHSAttributeSet" |
 | summarize | bool | True | AI 3-line role summary (requires LLM config) |
 | refresh | bool | False | Bypass summary cache |
+| include_source | bool | False | Append class source code after structure |
+| max_source_chars | int | 6000 | Max chars for appended source |
+| compact | bool | True | Limit items per section (15 fields, 25 methods, 10 refs) |
+> Tip: Default `compact=True` keeps output AI-friendly (~4-8KB). Use `compact=False` only when you need the complete field/method listing.
 
 ### analyze_impact_and_risk
 Blast radius analysis before modifying a class or method.
@@ -209,8 +226,10 @@ Blast radius analysis before modifying a class or method.
 | method_name | str | None | If provided, also traces method-level callers of class_name::method_name |
 | detail_level | str | "summary" | "summary" (fast) or "full" (expensive) |
 | query | str | None | Filter results by class name/pattern |
+| max_results | int | 0 | Limit shown items (0=auto: 5 for summary, 20 for full) |
 > Tip: Use `method_name=` to find exactly who calls a specific method (C++ and C# supported).
 > Always use `detail_level="summary"` first to gauge scope before requesting "full".
+> Now includes Source↔Asset cross-reference (Blueprint/Prefab assets referencing the target class).
 
 ### trace_gameplay_flow
 Trace a method's full call chain with source code.
@@ -232,7 +251,19 @@ Find all methods that call a specific method (reverse call graph).
 | project_path* | str | — | |
 | class_name* | str | — | Class containing the target method |
 | method_name* | str | — | Method to find callers of |
+| max_results | int | 30 | Limit shown callers (reports omitted count) |
 > Use this to understand blast radius before modifying a method.
+
+### read_class_source
+Return actual source code of a class or a specific method within it.
+| Param | Type | Default | Notes |
+|-------|------|---------|-------|
+| project_path* | str | — | |
+| class_name* | str | — | e.g. "BattleManager", "AHSCharacterBase" |
+| max_chars | int | 8000 | Max characters to return (max recommended 15000) |
+| method_name | str | None | If provided, returns only that method's body |
+> Use `method_name=` for token-efficient method-level reads.
+> Use after `explore_class_semantics` or `find_method_callers` to read actual implementation.
 
 ### find_call_path
 Find the shortest call path between two methods (A → B connection).
@@ -265,7 +296,10 @@ Supports C++ `ClassName::method` and namespace-style functions (`namespace Foo {
 | project_path* | str | — | |
 | class_name* | str | — | Use namespace name for namespace-style C++ functions |
 | method_name* | str | — | |
+| include_source | bool | False | Append the method body source code after control flow |
+| max_source_chars | int | 4000 | Max chars for appended source |
 > If method not found in the given class, the tool suggests classes that DO contain it.
+> Use `include_source=True` to get both the control flow summary and actual code in one call.
 
 ### get_architecture_advice
 Architecture diagnosis with refactoring suggestions.
@@ -295,6 +329,47 @@ Git diff architectural impact analysis.
 |-------|------|---------|-------|
 | project_path* | str | — | |
 | commit_ref | str | None | Default: HEAD~1. e.g. "main", commit SHA |
+
+### find_class_hierarchy
+Full inheritance hierarchy — ancestor chain and/or descendant tree.
+| Param | Type | Default | Notes |
+|-------|------|---------|-------|
+| project_path* | str | — | |
+| class_name* | str | — | e.g. "APlayerCharacter", "ManagerBattle" |
+| direction | str | "both" | "up" (ancestors), "down" (descendants), or "both" |
+| max_depth | int | 10 | Maximum traversal depth |
+> Use "up" before refactoring a class to see what it inherits.
+> Use "down" before changing a base class to see all affected subclasses.
+
+### find_unused_assets
+Detect unreferenced assets for project cleanup (Unity/UE5 only).
+| Param | Type | Default | Notes |
+|-------|------|---------|-------|
+| project_path* | str | — | Project root or Source/Scripts path |
+| scan_dir | str | None | Optional subdirectory to limit scan |
+| max_results | int | 50 | Pass 0 for unlimited |
+> ⚠ Assets loaded dynamically (Resources.Load, soft references, Addressables) may be falsely reported. Verify before deleting.
+> Reports wasted disk space and groups by file type.
+
+### query_project_api
+Search project code as an API reference — find classes, methods, properties by keyword.
+| Param | Type | Default | Notes |
+|-------|------|---------|-------|
+| project_path* | str | — | |
+| query* | str | — | e.g. "Health", "Attack", "Save" |
+| scope | str | "all" | "all", "classes", "methods", or "properties" |
+| max_results | int | 20 | Pass 0 for unlimited |
+> Searches project code only (not engine source). Results ranked by relevance.
+> UE5: auto-categorizes by prefix (A=Actor, U=Object, F=Struct, E=Enum, I=Interface).
+
+### detect_patterns
+Detect design patterns and architectural patterns used in the project.
+| Param | Type | Default | Notes |
+|-------|------|---------|-------|
+| project_path* | str | — | |
+| max_results | int | 30 | Pass 0 for unlimited |
+> UE5 patterns: Subsystem, Component Composition, GAS Ability/AttributeSet, Event Delegate, Replication, Interface, BehaviorTree
+> Unity patterns: Singleton, Coroutine Workflow, ScriptableObject, Event/Observer, Object Pooling, State Machine
 
 ### execute_gdep_cli
 Raw CLI access — run any gdep command directly.
@@ -554,6 +629,9 @@ Example: `["info"]`
 | UE5-GAS-003 | UE5 | Info | — | Excessive BlueprintCallable (>10) |
 | UE5-GAS-004 | UE5 | Info | — | BlueprintPure missing const |
 | UE5-NET-001 | UE5 | Info | — | Replicated property without callback |
+| UE5-BP-001 | UE5 | Warning | — | Blueprint references C++ class not found in source (orphan) |
+| UE5-BP-002 | UE5 | Warning | — | Blueprint overrides K2_ method from deleted/changed function |
+| UNI-ASSET-001 | Unity | Warning | — | Script GUID in prefab/scene with no matching .cs.meta file |
 | AXM-PERF-001 | Axmol | Warning | ✅ | getChildByName/getChildByTag inside update() |
 | AXM-MEM-001 | Axmol | Warning | ✅ | retain() called without matching release() |
 | AXM-EVENT-001 | Axmol | Info | ✅ | addEventListenerWith* without removeEventListener |

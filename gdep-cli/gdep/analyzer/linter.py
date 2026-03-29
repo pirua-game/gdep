@@ -135,7 +135,8 @@ class Linter:
     def __init__(self):
         self.results: list[LintResult] = []
 
-    def lint_ue5(self, project: UE5Project) -> list[LintResult]:
+    def lint_ue5(self, project: UE5Project,
+                 source_path: str | None = None) -> list[LintResult]:
         self.results = []
         for cls_name, cls in project.classes.items():
             self._check_ue5_heavy_lifecycle(cls)
@@ -145,6 +146,11 @@ class Linter:
             self._check_ue5_replication(cls)
 
         self._check_circular_dependencies(project)
+
+        # Blueprint ↔ Source 정합성 검증
+        if source_path:
+            self._check_ue5_bp_integrity(project, source_path)
+
         return self.results
 
     def _check_ue5_heavy_lifecycle(self, cls: UE5Class):
@@ -338,6 +344,171 @@ class Linter:
                                "the callback to react to network updates."
                 ))
 
+    def _check_ue5_bp_integrity(self, project: Any, source_path: str):
+        """[UE5-BP] Check Blueprint ↔ C++ source integrity."""
+        try:
+            from ..ue5_blueprint_mapping import build_bp_map
+            bp_map = build_bp_map(source_path)
+        except Exception:
+            return  # BP mapping not available — silently skip
+
+        if not bp_map:
+            return
+
+        all_classes = {**project.classes, **project.structs}
+
+        for bp_path, bp_info in bp_map.blueprints.items():
+            cpp_parent = getattr(bp_info, 'cpp_parent', '') or ''
+            if not cpp_parent:
+                continue
+
+            # UE5-BP-001: Blueprint references a C++ class not found in source
+            # BP stores names without prefix (e.g. "LyraGameplayAbility")
+            # while source uses prefixed names ("ULyraGameplayAbility")
+            def _resolve_class(name: str) -> bool:
+                if name in all_classes:
+                    return True
+                # Try stripping U/A/F/I prefix
+                if len(name) > 1 and name[0] in 'UAFI':
+                    if name[1:] in all_classes:
+                        return True
+                # Try adding U/A/F prefix (BP→source direction)
+                for prefix in ('U', 'A', 'F', 'I'):
+                    if (prefix + name) in all_classes:
+                        return True
+                return False
+
+            if not _resolve_class(cpp_parent):
+                    # Skip engine base classes (AActor, UObject, APawn, etc.)
+                    _ENGINE_BASES = {
+                        'AActor', 'APawn', 'ACharacter', 'APlayerController',
+                        'AGameModeBase', 'AGameMode', 'AGameStateBase',
+                        'APlayerState', 'AHUD', 'AInfo',
+                        'UObject', 'UActorComponent', 'USceneComponent',
+                        'UUserWidget', 'UGameInstance', 'UAnimInstance',
+                        'UBlueprintFunctionLibrary', 'UDataAsset',
+                    }
+                    if cpp_parent not in _ENGINE_BASES:
+                        bp_name = bp_path.split('/')[-1] if '/' in bp_path else bp_path
+                        self.results.append(LintResult(
+                            rule_id="UE5-BP-001",
+                            severity="Warning",
+                            message=(
+                                f"Blueprint '{bp_name}' references C++ class "
+                                f"'{cpp_parent}' which was not found in project source."
+                            ),
+                            class_name=cpp_parent,
+                            file_path=bp_path,
+                            suggestion=(
+                                "Verify the C++ parent class still exists. "
+                                "The class may have been renamed, deleted, or moved. "
+                                "If intentional, re-parent the Blueprint."
+                            ),
+                        ))
+
+            # UE5-BP-002: Blueprint overrides K2_ methods from deleted/changed functions
+            k2_overrides = getattr(bp_info, 'k2_overrides', []) or []
+            # Resolve cpp_parent to actual key in all_classes
+            _resolved_parent = None
+            if cpp_parent in all_classes:
+                _resolved_parent = cpp_parent
+            else:
+                for prefix in ('U', 'A', 'F', 'I'):
+                    if (prefix + cpp_parent) in all_classes:
+                        _resolved_parent = prefix + cpp_parent
+                        break
+            if k2_overrides and _resolved_parent:
+                cls = all_classes[_resolved_parent]
+                func_names = {f.name for f in getattr(cls, 'functions', [])}
+                for k2_name in k2_overrides:
+                    # K2_ prefix corresponds to a virtual C++ function
+                    clean_name = k2_name.replace('K2_', '')
+                    if clean_name and clean_name not in func_names and k2_name not in func_names:
+                        bp_name = bp_path.split('/')[-1] if '/' in bp_path else bp_path
+                        self.results.append(LintResult(
+                            rule_id="UE5-BP-002",
+                            severity="Warning",
+                            message=(
+                                f"Blueprint '{bp_name}' overrides '{k2_name}' "
+                                f"but function '{clean_name}' not found in C++ class '{cpp_parent}'."
+                            ),
+                            class_name=cpp_parent,
+                            file_path=bp_path,
+                            suggestion=(
+                                "The C++ virtual function may have been renamed or removed. "
+                                "Update the Blueprint override or remove the stale node."
+                            ),
+                        ))
+
+    def _check_unity_asset_integrity(self, source_path: str) -> list[LintResult]:
+        """[UNI-ASSET] Check Unity .meta GUID integrity for script references."""
+        import os
+        from pathlib import Path as _Path
+
+        results: list[LintResult] = []
+        src_root = _Path(source_path)
+
+        # Collect script GUIDs from .meta files
+        script_guids: dict[str, str] = {}  # guid → script file path
+        for meta_file in src_root.rglob("*.cs.meta"):
+            try:
+                content = meta_file.read_text(encoding="utf-8", errors="replace")
+                for line in content.splitlines():
+                    if line.strip().startswith("guid:"):
+                        guid = line.split("guid:")[-1].strip()
+                        script_guids[guid] = str(meta_file).replace(".meta", "")
+                        break
+            except Exception:
+                continue
+
+        if not script_guids:
+            return results
+
+        # Scan .prefab and .unity files for missing script references
+        _ASSET_GLOBS = ["*.prefab", "*.unity", "*.asset"]
+        checked_guids: set[str] = set()
+        for pattern in _ASSET_GLOBS:
+            # Search in parent directories to find Assets/
+            search_root = src_root.parent if src_root.name in ("Scripts", "scripts") else src_root
+            for asset_file in search_root.rglob(pattern):
+                try:
+                    content = asset_file.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    continue
+
+                # Look for m_Script: {fileID: 11500000, guid: <GUID>, type: 3}
+                for match in re.finditer(r'guid:\s*([0-9a-f]{32})', content):
+                    guid = match.group(1)
+                    if guid in checked_guids:
+                        continue
+                    checked_guids.add(guid)
+
+                    # Check if guid references a script that has no .cs file
+                    # (the guid should be in our script_guids map if the script exists)
+                    # We only flag if it looks like a script reference (fileID: 11500000)
+                    # Check context around the match
+                    start = max(0, match.start() - 100)
+                    context = content[start:match.start()]
+                    if "11500000" in context and guid not in script_guids:
+                        # This is a script reference with a GUID not in our .meta files
+                        asset_name = asset_file.name
+                        results.append(LintResult(
+                            rule_id="UNI-ASSET-001",
+                            severity="Warning",
+                            message=(
+                                f"Asset '{asset_name}' references a script (GUID: {guid[:8]}...) "
+                                f"that has no matching .cs.meta file in the project."
+                            ),
+                            class_name="(unknown script)",
+                            file_path=str(asset_file),
+                            suggestion=(
+                                "The referenced script may have been deleted or moved. "
+                                "Check the asset in Unity Editor for missing script warnings."
+                            ),
+                        ))
+
+        return results
+
     def _check_circular_dependencies(self, project: Any):
         """General check for circular dependencies."""
         from ..ue5_parser import find_cycles
@@ -376,6 +547,7 @@ class Linter:
         # Python-side Unity checks (coroutine patterns)
         if source_path:
             unity_results.extend(self._check_unity_coroutine_patterns(source_path))
+            unity_results.extend(self._check_unity_asset_integrity(source_path))
 
         return unity_results
 

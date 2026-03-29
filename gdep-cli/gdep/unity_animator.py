@@ -270,7 +270,13 @@ def _find_controllers(project_path: str,
                       controller_name: str | None = None,
                       max_count: int = 0) -> list[Path]:
     """Find .controller files in a Unity project."""
-    root = Path(project_path).resolve()
+    # Traverse up to find the Assets/ root (handles Scripts subfolder paths)
+    try:
+        from .unity_event_refs import find_assets_root
+        assets_root = find_assets_root(project_path)
+        root = assets_root if assets_root is not None else Path(project_path).resolve()
+    except Exception:
+        root = Path(project_path).resolve()
     _IGNORE = {"Library", "Temp", "obj", "Packages", "node_modules", ".git", "ProjectSettings"}
 
     results: list[Path] = []

@@ -50,6 +50,35 @@ def _parse_scan_output(stdout: str) -> dict:
 
 # ── 엔드포인트 ────────────────────────────────────────────────
 
+@router.get("/browse")
+def browse_directory(path: str = Query("")):
+    """디렉토리 브라우저 — 폴더 선택기에서 사용"""
+    import os, string
+    target = Path(path.strip()) if path.strip() else None
+
+    if target is None or str(target) == "":
+        # 루트: Windows → 드라이브 목록, Unix → ["/"]
+        if os.name == "nt":
+            drives = [f"{d}:\\" for d in string.ascii_uppercase
+                      if Path(f"{d}:\\").exists()]
+            return {"parent": "", "dirs": drives, "is_root": True}
+        return {"parent": "", "dirs": ["/"], "is_root": True}
+
+    if not target.exists() or not target.is_dir():
+        raise HTTPException(status_code=400, detail=f"Not a directory: {path}")
+
+    try:
+        dirs = sorted(
+            str(d) for d in target.iterdir()
+            if d.is_dir() and not d.name.startswith(".")
+        )
+    except PermissionError:
+        dirs = []
+
+    parent = str(target.parent) if target.parent != target else ""
+    return {"parent": parent, "dirs": dirs, "is_root": False}
+
+
 @router.get("/detect")
 def detect_project(path: str = Query(...)):
     profile = _get_profile(path)
@@ -244,13 +273,23 @@ class DescribeRequest(BaseModel):
 
 
 class ReadSourceRequest(BaseModel):
-    path:       str
-    class_name: str
-    max_chars:  int = 8000
+    path:        str
+    class_name:  str
+    max_chars:   int = 8000
+    method_name: str | None = None
 
 
 @router.post("/read_source")
 def read_source(req: ReadSourceRequest):
+    # method_name이 있으면 read_class_source MCP 도구 사용
+    if req.method_name:
+        from gdep_mcp.tools.read_class_source import run as read_class_source_run
+        content = read_class_source_run(
+            req.path, req.class_name,
+            max_chars=req.max_chars, method_name=req.method_name,
+        )
+        return {"content": content}
+
     profile = _get_profile(req.path)
 
     if _is_ue5(profile):
@@ -424,20 +463,19 @@ def describe(req: DescribeRequest):
 # ── Phase 1-2: explain_method_logic ──────────────────────────
 
 class ExplainMethodLogicRequest(BaseModel):
-    path:        str
-    class_name:  str
-    method_name: str
+    path:           str
+    class_name:     str
+    method_name:    str
+    include_source: bool = False
 
 
 @router.post("/explain-method-logic")
 def explain_method_logic(req: ExplainMethodLogicRequest):
     try:
         from gdep_mcp.tools.explain_method_logic import run, _parse_control_flow
-        from gdep_mcp.tools.explain_method_logic import (
-            _extract_cs_method, _extract_cpp_method
-        )
 
-        raw_text = run(req.path, req.class_name, req.method_name)
+        raw_text = run(req.path, req.class_name, req.method_name,
+                       include_source=req.include_source)
 
         # 구조화: "1. Guard    : ..." / "2. Branch   : ..." 줄 파싱
         # run()이 번호를 붙여 출력하므로 "N. " 접두사를 먼저 제거

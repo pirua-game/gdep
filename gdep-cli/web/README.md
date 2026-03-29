@@ -12,6 +12,7 @@ The gdep Web UI wraps the gdep CLI into a local web application, replacing termi
 - Real-time file-watch panel that auto-analyzes on every save
 - AI chat agent with tool-calling against your actual codebase
 - Engine-specific explorers (UE5 GAS, Blueprint mapping, Animator, BehaviorTree …)
+- Pattern detection, unused asset scanning, and API-level code search
 
 **Stack:** React 19 + TypeScript + Vite + TailwindCSS (frontend) · FastAPI + Python (backend)
 
@@ -75,18 +76,24 @@ npm run dev
 
 ## Features
 
+The UI is organized into **6 main tabs**.
+
 ### 1. Class Browser
 
 Explore every class in your project without opening an IDE.
 
-- Fields, methods, and base classes per class
+- **Class type indicators** — 🟢 project / 🟡 engine-derived / 🔴 engine-base badges on every class item (hover for description)
 - **Inheritance chain breadcrumb** — clickable `A → B → C → D` chain; click any ancestor to navigate to it
-- **Method Logic panel** — click any method to see its internal control flow (Guard / Branch / Loop / Switch / Always) in 5–10 lines, without reading the full source
+- **Access modifier groups** — fields and methods are separated into 🔓 public / 🛡 protected / 🔒 private expandable sections
+- **Expandable Method Analysis cards** — click any method card to expand it in-place and see:
+  - Internal control flow: Guard / Branch / Loop / Switch / Exception items with color-coded labels
+  - `{ } 소스 보기` — view the method's source code inline
+  - `📡 호출 추적` — find every call site of this method across the project
+  - `▶ 흐름 그래프` — jump directly to the Flow Graph tab for this method
+- **AI Summary** (`🔍 AI 요약`) — AI-powered class overview: role, structure, design patterns, relationships; Compact / Full modes
+- **API Search mode** — toggle to keyword-search across all classes, methods, and properties by relevance score; scope filter: All / Classes / Methods / Properties
 - Coupling metrics and dead-code flags
 - Unity Prefab / UE5 Blueprint back-references
-- Impact analysis — what else breaks if you change this class
-- Test-scope suggestions — which test files to run
-- Lint issues with fix suggestions, inline
 - UE5 Blueprint↔C++ mapping details
 
 ### 2. Flow Graph
@@ -98,19 +105,46 @@ Visualize method call chains as an interactive node graph.
 - Drill-down into any node to expand its call tree
 - LLM explanation panel — ask "what does this flow do?"
 - Supports C++→Blueprint boundary crossings (UE5)
+- **Reverse Callers panel** — select any node and click "Who calls this?" to see every caller across the project
+- **Find Path panel** — specify From (class.method) and To (class.method), then find the call chain connecting them (C#/Unity)
 
-### 3. Dependency View
+### 3. Analysis
 
 Architectural health dashboard for the whole project.
 
 - Circular dependency detection with highlighted cycle paths
 - High-coupling class ranking
 - Dead code list
-- Inheritance hierarchy graph
-- Prefab / Blueprint usage tracking across the project
+- **Inheritance hierarchy** — full hierarchy tree with direction toggle (Up / Down / Both) to trace ancestors or descendants; ReactFlow graph alongside text results
 - One-click impact and test-scope for any class
+- LLM architecture advice
+- Lint issue scan with fix suggestions
+- Git diff summary — architecture delta between two commits
+- **Patterns** — detect architectural anti-patterns (God Object, Singleton abuse, tight coupling chains, etc.)
+- **Unused Assets** (Unity + UE5) — scan for assets referenced nowhere in code; configurable scan directory and result limit
+- Method callers — find all callers of a given method
+- Call path — shortest call chain between two methods (C#/Unity)
 
-### 4. Watch Panel
+### 4. Engine
+
+Engine-specific explorers, each with its own sub-tab.
+
+| Engine | Sub-tab | What you get |
+|--------|---------|-------------|
+| Unity | **UnityEvent** | Inspector-wired persistent calls invisible in code search |
+| Unity | **Animator** | States, transitions, blend trees from AnimatorController |
+| Unity | **Unused Assets** | Assets with no code references in the project |
+| UE5 | **GAS** | Abilities, Effects, Attributes, Tags, ASC owners — `detail_level`, `category` (tag prefix), and `query` (keyword) filters |
+| UE5 | **Blueprint** | C++ class → BP implementations, K2 overrides, events, variables |
+| UE5 | **Animation** | ABP states, Montage slots, GAS Notifies |
+| UE5 | **BehaviorTree** | BT asset structure with task/decorator/service nodes |
+| UE5 | **StateTree** | StateTree (UE 5.2+) state + transition map |
+| UE5 | **Unused Assets** | Assets with no code references in the project |
+| Axmol | **Events** | EventDispatcher and Scheduler binding map |
+
+All engine analysis results display a **Confidence badge** (🟢 HIGH / 🟡 MEDIUM / 🔴 LOW) indicating the reliability of the analysis based on the data source (source code vs. binary asset scanning).
+
+### 5. Watch Panel
 
 Live feedback as you code — no terminal needed.
 
@@ -120,7 +154,7 @@ Live feedback as you code — no terminal needed.
 - Configurable debounce and analysis depth
 - Optional target-class filter to reduce noise
 
-### 5. Agent Chat
+### 6. Agent Chat
 
 Conversational AI that reads your actual code.
 
@@ -132,28 +166,12 @@ Conversational AI that reads your actual code.
 
 ---
 
-## Engine-Specific Explorers
-
-| Engine | Feature | What you get |
-|--------|---------|-------------|
-| Unity | **UnityEvent bindings** | Inspector-wired persistent calls invisible in code search |
-| Unity | **Animator analysis** | States, transitions, blend trees from AnimatorController |
-| UE5 | **GAS explorer** | Abilities, Effects, Attributes, Tags, ASC owners — with `detail_level`, `category` (tag prefix), and `query` (keyword) filters |
-| UE5 | **Blueprint mapping** | C++ class → BP implementations, K2 overrides, events, variables |
-| UE5 | **Animation analysis** | ABP states, Montage slots, GAS Notifies |
-| UE5 | **BehaviorTree** | BT asset structure with task/decorator/service nodes |
-| UE5 | **StateTree** | StateTree (UE 5.2+) state + transition map |
-| Axmol | **Event bindings** | EventDispatcher and Scheduler binding map |
-
-All engine analysis results display a **Confidence badge** (🟢 HIGH / 🟡 MEDIUM / 🔴 LOW) indicating the reliability of the analysis based on the data source (source code vs. binary asset scanning).
-
----
-
 ## Configuration (Sidebar)
 
 | Setting | Description |
 |---------|-------------|
-| **Scripts path** | Absolute path to your project's source folder |
+| **Scripts path** | Absolute path to your project's source folder — type directly or use the 📁 folder picker |
+| **Folder picker** | Server-side directory browser — navigate and select any folder without typing paths |
 | **Context button** | View the project's AI context (AGENTS.md) and run `gdep init` to generate it |
 | **Engine profile** | auto · Unity · UE5 · Axmol · .NET · C++ |
 | **Analysis depth** | 1–8 levels for flow and impact tracing |
@@ -186,8 +204,10 @@ The backend exposes a REST + WebSocket API consumed by the frontend. All routes 
 | project | `POST /project/test-scope` | Test files for a changed class |
 | project | `POST /project/diff-summary` | Architecture delta for a git diff |
 | project | `POST /project/explain-method-logic` | Internal control flow of a method (Guard/Branch/Loop) |
+| project | `POST /project/read_source` | Class or method source code (supports `method_name`) |
 | project | `GET  /project/context` | Project AI context / AGENTS.md content |
 | project | `POST /project/init` | Generate `.gdep/AGENTS.md` |
+| project | `GET  /project/browse` | Server-side directory listing (drives → subdirs) |
 | classes | `GET /classes/list` | All classes with fields + methods |
 | flow | `POST /flow/analyze` | Method call graph |
 | engine | `POST /engine/unity/events` | UnityEvent bindings |
@@ -201,6 +221,13 @@ The backend exposes a REST + WebSocket API consumed by the frontend. All routes 
 | unity | `GET /unity/refs` | All prefab/scene references |
 | ue5 | `GET /ue5/blueprint_refs` | All blueprint references |
 | ue5 | `GET /ue5/blueprint_mapping` | C++↔BP detailed mapping |
+| analysis | `POST /analysis/hierarchy` | Full class inheritance tree (up/down/both) |
+| analysis | `POST /analysis/unused-assets` | Unused asset scan |
+| analysis | `POST /analysis/query-api` | API-level keyword search across classes/methods/properties |
+| analysis | `POST /analysis/detect-patterns` | Architectural anti-pattern detection |
+| analysis | `POST /analysis/method-callers` | Find all callers of a method |
+| analysis | `POST /analysis/call-path` | Call chain path between two methods (C#/Unity) |
+| analysis | `POST /analysis/explore-semantics` | AI-powered class semantics summary (compact / full) |
 | agent | `POST /agent/run` | SSE-streamed AI agent |
 | agent | `POST /agent/reset` | Clear agent session |
 | llm | `POST /llm/analyze` | LLM flow explanation |
@@ -218,12 +245,14 @@ web/
 │   ├── requirements.txt
 │   └── routers/
 │       ├── project.py           # scan / impact / describe / lint / advise / diff
-│       │                        # explain-method-logic / context / init
+│       │                        # explain-method-logic / read_source / context / init / browse
 │       ├── classes.py           # class list parser (C# / C++ / UE5)
 │       ├── flow.py              # call graph tracer
 │       ├── engine.py            # engine-specific analyzers (GAS w/ filters)
 │       ├── unity.py             # Unity ref queries
 │       ├── ue5.py               # UE5 blueprint queries
+│       ├── analysis.py          # hierarchy / unused-assets / query-api / detect-patterns
+│       │                        # method-callers / call-path / explore-semantics
 │       ├── agent.py             # SSE agent with tool-calling
 │       ├── llm.py               # LLM provider bridge
 │       └── watch.py             # WebSocket file watcher
@@ -231,18 +260,25 @@ web/
     ├── package.json
     ├── vite.config.ts
     └── src/
-        ├── App.tsx              # Tab layout
+        ├── App.tsx              # 6-tab layout
         ├── store.tsx            # Global state + caching
+        ├── i18n.ts              # EN / KR translations
         ├── api/
         │   └── client.ts        # Typed API functions
-        ├── components/
-        │   ├── Sidebar.tsx      # Project config panel + Context modal
-        │   ├── ClassBrowser.tsx # Class explorer + Method Logic + inheritance chain
-        │   ├── DependencyView.tsx  # Dependency tabs + GAS filters
-        │   ├── WatchPanel.tsx   # Real-time file watcher
-        │   └── ConfidenceBadge.tsx  # HIGH/MEDIUM/LOW confidence pill badge
-        └── tabs/
-            └── AgentChat.tsx
+        └── components/
+            ├── Sidebar.tsx      # Project config panel + folder picker + Context modal
+            ├── ClassBrowser.tsx # Class explorer: expandable method cards, AI summary,
+            │                    # public/protected/private groups, API search mode
+            ├── AnalysisView.tsx # Analysis tab: coupling / inheritance / dead code /
+            │                    # impact / test-scope / advise / lint / diff /
+            │                    # patterns / unused assets / method-callers / call-path
+            ├── EngineView.tsx   # Engine tab: Unity / UE5 / Axmol sub-tabs
+            ├── FlowGraph.tsx    # Call graph + Reverse Callers + Find Path
+            ├── WatchPanel.tsx   # Real-time file watcher
+            ├── ConfidenceBadge.tsx  # HIGH/MEDIUM/LOW confidence pill badge
+            ├── MdResult.tsx     # Shared markdown/text result renderer
+            └── tabs/
+                └── AgentChat.tsx    # SSE-streaming AI agent chat
 ```
 
 ---

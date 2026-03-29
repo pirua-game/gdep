@@ -17,9 +17,11 @@ if str(_GDEP_ROOT) not in sys.path:
 from gdep import runner
 from gdep.confidence import ConfidenceTier, confidence_footer
 from gdep.detector import detect, ProjectKind
+from gdep.method_extractor import extract_cpp_method, extract_cs_method, extract_brace_body
 
 
-def run(project_path: str, class_name: str, method_name: str) -> str:
+def run(project_path: str, class_name: str, method_name: str,
+        include_source: bool = False, max_source_chars: int = 4000) -> str:
     try:
         profile = detect(project_path)
 
@@ -52,7 +54,7 @@ def run(project_path: str, class_name: str, method_name: str) -> str:
                 offset += len(chunk.content) + 1  # +1 for \n separator
             source = "\n".join(parts)
 
-        result = _extract_cpp_method(source, method_name) if is_cpp else _extract_cs_method(source, method_name)
+        result = extract_cpp_method(source, method_name) if is_cpp else extract_cs_method(source, method_name)
 
         if result is None:
             suggestions = _find_method_elsewhere(project_path, profile, method_name, is_cpp)
@@ -104,75 +106,18 @@ def run(project_path: str, class_name: str, method_name: str) -> str:
         if file_ref:
             lines.append(f"\nSource: {file_ref} : {method_name}()")
 
+        # include_source: 메서드 본문 원본 코드 추가
+        if include_source and body:
+            lang = "cpp" if is_cpp else "csharp"
+            truncated = body[:max_source_chars]
+            if len(body) > max_source_chars:
+                truncated += f"\n... ({len(body) - max_source_chars} chars truncated)"
+            lines.append(f"\n### Method Body\n```{lang}\n{truncated}\n```")
+
         return "\n".join(lines) + confidence_footer(ConfidenceTier.HIGH, "source-level control flow")
 
     except Exception as e:
         return f"[explain_method_logic] Error: {e}"
-
-
-# ── Method body extractors ─────────────────────────────────────
-
-def _extract_cpp_method(source: str, method_name: str) -> tuple[str, int] | None:
-    """Extract C++ method body via cpp_flow utility, falling back to regex.
-    Returns (body_text, match_start_position) or None."""
-    try:
-        from gdep.cpp_flow import _extract_function_body
-        result = _extract_function_body(source, method_name)
-        if result is not None:
-            return (result, 0)
-    except Exception:
-        pass
-
-    # Fallback 1: ClassName::method_name pattern
-    pat = re.compile(
-        r'\b\w+\s*::\s*' + re.escape(method_name) + r'\s*\([^{;]*\)\s*(?:const\s*)?\{',
-        re.DOTALL,
-    )
-    m = pat.search(source)
-    if not m:
-        # Fallback 2: namespace-style (func defined without ClassName:: prefix inside namespace block)
-        # e.g.  std::string bigAddNum(std::string a, int b) {
-        pat_ns = re.compile(
-            r'(?:^|\n)[ \t]*(?:[\w:<>*& ]+[ \t]+)' + re.escape(method_name) + r'\s*\([^;{}]*\)\s*(?:const\s*)?\s*\{',
-        )
-        m = pat_ns.search(source)
-    if not m:
-        return None
-    start = source.index("{", m.start())
-    body = _extract_brace_body(source, start)
-    return (body, m.start()) if body else None
-
-
-def _extract_cs_method(source: str, method_name: str) -> tuple[str, int] | None:
-    """Extract C# method body via regex.
-    Returns (body_text, match_start_position) or None."""
-    pat = re.compile(
-        r'(?:(?:public|private|protected|internal|static|virtual|override|async|sealed|abstract|new)\s+)*'
-        r'[\w<>\[\],\s]+\s+' + re.escape(method_name) + r'\s*\([^)]*\)\s*(?:\w+[^{]*?)?\{',
-        re.DOTALL,
-    )
-    m = pat.search(source)
-    if not m:
-        # Simpler fallback
-        pat2 = re.compile(r'\b' + re.escape(method_name) + r'\s*\([^)]*\)\s*\{', re.DOTALL)
-        m = pat2.search(source)
-        if not m:
-            return None
-    start = source.index("{", m.start())
-    body = _extract_brace_body(source, start)
-    return (body, m.start()) if body else None
-
-
-def _extract_brace_body(text: str, brace_start: int) -> str | None:
-    depth = 0
-    for i in range(brace_start, len(text)):
-        if text[i] == "{":
-            depth += 1
-        elif text[i] == "}":
-            depth -= 1
-            if depth == 0:
-                return text[brace_start + 1:i]
-    return None
 
 
 # ── Control flow parser ────────────────────────────────────────
@@ -222,19 +167,19 @@ def _parse_control_flow(body: str) -> list[str]:
                 if re.search(r"\b(return|throw)\b", inner) and "else" not in inner:
                     exit_m = re.search(r"\b(return|throw)\s+([^;]{0,50})", inner)
                     exit_str = (exit_m.group(0)[:55].strip() if exit_m else "return/throw")
-                    items.append(f"Guard    : if ({cond[:70]}) → {exit_str}")
+                    items.append(f"Guard    : if ({cond[:150]}) → {exit_str}")
                     i = end_i
                     continue
 
             # ── Branch: if / else ────────────────────────────────
             true_calls, false_calls = _extract_branch_calls(lines, i)
             if false_calls:
-                items.append(f"Branch   : if ({cond[:70]})")
+                items.append(f"Branch   : if ({cond[:150]})")
                 items.append(f"   ├─ true  : {', '.join(true_calls[:2]) or '...'}")
                 items.append(f"   └─ false : {', '.join(false_calls[:2]) or '...'}")
             else:
                 call_str = ", ".join(true_calls[:2]) or "..."
-                items.append(f"Branch   : if ({cond[:70]}) → {call_str}")
+                items.append(f"Branch   : if ({cond[:150]}) → {call_str}")
             block, end_i = _collect_block(lines, i)
             i = end_i
             continue

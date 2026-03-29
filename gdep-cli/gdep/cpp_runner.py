@@ -88,6 +88,21 @@ def scan(src: str, top: int = 20, circular: bool = True, dead_code: bool = False
         if fmt == "json":
             return RunResult(ok=True, stdout=json.dumps(data, indent=2, ensure_ascii=False), data=data)
 
+        if fmt == "dot":
+            dot_lines = ['digraph coupling {', '  rankdir=LR;', '  node [shape=box];']
+            for item in active_coupling:
+                label = f"{item['name']}\\n(score: {item['score']})"
+                dot_lines.append(f'  "{item["name"]}" [label="{label}"];')
+            dot_lines.append('}')
+            return RunResult(ok=True, stdout="\n".join(dot_lines), data=data)
+
+        if fmt == "mermaid":
+            mm_lines = ['graph TD']
+            for item in active_coupling:
+                safe = item['name'].replace('-', '_')
+                mm_lines.append(f'  {safe}["{item["name"]} ({item["score"]})"]')
+            return RunResult(ok=True, stdout="\n".join(mm_lines), data=data)
+
         # Console output
         total_files = data["summary"]["fileCount"]
         lines = [

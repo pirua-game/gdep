@@ -18,7 +18,8 @@ from gdep.confidence import ConfidenceTier, confidence_footer
 from gdep.detector import detect
 
 
-def run(project_path: str, class_name: str, method_name: str) -> str:
+def run(project_path: str, class_name: str, method_name: str,
+        max_results: int = 30) -> str:
     """
     Find all methods that call class_name::method_name (reverse call graph).
 
@@ -26,6 +27,8 @@ def run(project_path: str, class_name: str, method_name: str) -> str:
         project_path: Absolute path to Scripts/Source directory.
         class_name:   Class containing the target method.
         method_name:  Method to find callers of.
+        max_results:  Maximum number of callers to return (default 30).
+                      Pass 0 for unlimited.
 
     Returns:
         Structured list of caller methods with call conditions.
@@ -48,13 +51,22 @@ def run(project_path: str, class_name: str, method_name: str) -> str:
             if stripped.startswith("\u2190"):  # ← character
                 callers.append(stripped)
 
+        total = len(callers)
+        limit = max_results if max_results > 0 else total
+        shown = callers[:limit]
+
         sections = [f"## Callers of {class_name}::{method_name}"]
         if not callers:
             sections.append(f"No callers found for {class_name}.{method_name}")
         else:
-            sections.append(f"Found **{len(callers)}** caller(s):\n")
-            for c in callers:
+            sections.append(f"Found **{total}** caller(s)" +
+                          (f" (showing first {limit}):" if total > limit else ":") +
+                          "\n")
+            for c in shown:
                 sections.append(f"  {c}")
+            if total > limit:
+                sections.append(f"\n... {total - limit} more callers omitted"
+                               f" (use max_results=0 to see all)")
 
         return "\n".join(sections) + confidence_footer(
             ConfidenceTier.HIGH, "source-level reverse call graph"
