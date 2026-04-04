@@ -21,13 +21,23 @@ for %%I in ("%CLI%") do set "CLI_SHORT=%%~sI"
 
 REM -- 1. Python check --
 echo [1/5] Checking Python...
-py -3.11 --version > nul 2>&1
-if errorlevel 1 (
-    echo  [ERROR] Python 3.11 is not installed.
-    echo          Please install it from https://python.org and run again.
-    goto :fail
+set PY_CMD=
+py -3 --version > nul 2>&1
+if not errorlevel 1 (
+    set PY_CMD=py -3
+    goto :py_found
 )
-for /f "tokens=2" %%v in ('py -3.11 --version 2^>^&1') do set PYVER=%%v
+python --version > nul 2>&1
+if not errorlevel 1 (
+    set PY_CMD=python
+    goto :py_found
+)
+echo  [ERROR] Python 3 is not installed.
+echo          Please install it from https://python.org and run again.
+goto :fail
+
+:py_found
+for /f "tokens=2" %%v in ('%PY_CMD% --version 2^>^&1') do set PYVER=%%v
 echo  [OK] Python %PYVER%
 
 REM -- 2. .NET Runtime check --
@@ -59,7 +69,7 @@ echo [4/5] Installing Python packages...
 
 if not exist "%VENV%" (
     echo  Creating virtual environment...
-    py -3.11 -m venv "%VENV%"
+    %PY_CMD% -m venv "%VENV%"
     if errorlevel 1 ( echo  [ERROR] Failed to create venv & goto :fail )
 )
 
