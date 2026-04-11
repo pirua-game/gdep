@@ -61,7 +61,7 @@ npm install -g gdep-mcp
 }
 ```
 
-That's it. Your AI now has **26** game-engine-aware tools available on every conversation.
+That's it. Your AI now has **29** game-engine-aware tools available on every conversation.
 
 ### What changes with MCP
 
@@ -70,11 +70,14 @@ Without gdep:  "CombatCore probably has some Manager dependencies..." ← halluc
 With gdep:     Direct deps: 2 · Indirect: 200+ UI classes · Asset: prefabs/UI/combat.prefab
 ```
 
-### 26 MCP Tools at a glance
+### 29 MCP Tools at a glance
 
 | Tool | When to use |
 |------|-------------|
 | `get_project_context` | **Always call first** — full project overview |
+| `wiki_search` | **Call before any analysis** — search previously analyzed classes/assets by keyword (FTS5 BM25). Instant if cached |
+| `wiki_list` | List all wiki nodes with staleness status — see what has already been analyzed |
+| `wiki_get` | Read full content of a specific wiki node |
 | `analyze_impact_and_risk` | Before modifying any class or method (`method_name=` for method-level callers; `detail_level="summary"` for quick count) |
 | `explain_method_logic` | Internal control flow of a single method — Guard/Branch/Loop/Always. Supports C++ namespace-style functions. `include_source=True` appends method body |
 | `trace_gameplay_flow` | Trace C++ → Blueprint call chains (`summary=True` for compact output) |
@@ -100,6 +103,23 @@ With gdep:     Direct deps: 2 · Indirect: 200+ UI classes · Asset: prefabs/UI/
 | `analyze_ue5_state_tree` | StateTree asset structure |
 | `analyze_ue5_animation` | ABP states + Montage + GAS Notifies |
 | `analyze_ue5_blueprint_mapping` | C++ class → Blueprint impl mapping — with **confidence header** |
+
+### Wiki — Analysis Result Cache
+
+Analysis results are automatically saved to `.gdep/wiki/` and indexed in SQLite + FTS5.
+The wiki accumulates knowledge across sessions — **always `wiki_search` before running fresh analysis**.
+
+```
+wiki_search("zombie ability") → instant result if already analyzed
+wiki_list()                   → see all cached nodes with staleness status
+wiki_get("class:ZombieChar")  → full cached analysis content
+```
+
+Key features:
+- FTS5 full-text search with BM25 ranking — CamelCase-aware (`"GameplayAbility"` finds `ULyraGameplayAbility`)
+- Dependency edges auto-extracted (inheritance, UPROPERTY, Behavioral Dependencies)
+- Staleness detection: node flagged when source file changes since last analysis
+- `related=True` on `wiki_search` expands results via dependency edges
 
 ### UE5 Confidence Transparency
 

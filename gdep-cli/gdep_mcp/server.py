@@ -56,6 +56,9 @@ from gdep_mcp.tools.find_unused_assets import run as _unused_assets_run
 from gdep_mcp.tools.read_class_source import run as _read_source_run
 from gdep_mcp.tools.query_project_api import run as _query_api_run
 from gdep_mcp.tools.detect_patterns import run as _detect_patterns_run
+from gdep_mcp.tools.wiki_search import run as _wiki_search_run
+from gdep_mcp.tools.wiki_list import run as _wiki_list_run
+from gdep_mcp.tools.wiki_get import run as _wiki_get_run
 
 # ── 추가 분석 모듈 (3~7단계 기능) — 로드 실패해도 서버는 기동됨 ──
 try:
@@ -1058,6 +1061,102 @@ async def read_class_source(project_path: str, class_name: str,
     """
     return await anyio.to_thread.run_sync(
         lambda: _read_source_run(project_path, class_name, max_chars, method_name)
+    )
+
+
+# ════════════════════════════════════════════════════════════════
+# WIKI TOOLS — 축적된 분석 결과 위키 조회
+# ════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+async def wiki_search(project_path: str, query: str,
+                      node_type: str | list[str] | None = None,
+                      related: bool = False,
+                      limit: int = 20) -> str:
+    """
+    Search the project wiki for previously analyzed classes, assets, and systems.
+
+    Uses FTS5 full-text search with BM25 ranking — finds nodes even when you
+    don't know the exact class name. Multi-word queries are OR'd automatically.
+
+    USE THIS TOOL FIRST before running fresh analysis tools.
+    The wiki accumulates analysis results across sessions — if a class or asset
+    has already been analyzed, you can get the result instantly without re-analysis.
+
+    USE THIS TOOL WHEN:
+    - You want to check if a class/asset has already been analyzed
+    - You want to find all analyzed entities related to a concept (e.g. "damage", "ability", "zombie AI")
+    - You want to see what the team has already explored in previous sessions
+    - You want to find classes related to a known class (use related=True)
+
+    Returns matching wiki nodes with BM25 relevance scores and content snippets.
+
+    Args:
+        project_path: Absolute path to the project Scripts/Source directory.
+        query:        Search keyword or phrase. Multi-word is OR'd.
+                      Examples: "damage", "PlayerCharacter", "GAS ability", "zombie AI"
+        node_type:    Optional filter. String or list of strings:
+                        'class', 'asset', 'system', 'pattern', 'conversation'
+                      Example: ['class', 'asset'] — search both types.
+                      None = search all types.
+        related:      If True, also includes nodes connected via dependency edges.
+                      Useful for finding related classes without knowing their names.
+        limit:        Maximum results to return (default 20).
+    """
+    return await anyio.to_thread.run_sync(
+        lambda: _wiki_search_run(project_path, query, node_type, related, limit)
+    )
+
+
+@mcp.tool()
+async def wiki_list(project_path: str,
+                    node_type: str | list[str] | None = None,
+                    limit: int = 50) -> str:
+    """
+    List all wiki nodes for this project — previously analyzed classes, assets, and systems.
+
+    USE THIS TOOL WHEN:
+    - You want to see all analyzed entities before starting work on a project
+    - You want to check if any nodes are stale (source has changed since last analysis)
+    - You want an overview of what knowledge has accumulated in the wiki
+
+    Stale nodes (⚠) need re-analysis — call the relevant analysis tool to refresh them.
+
+    Args:
+        project_path: Absolute path to the project Scripts/Source directory.
+        node_type:    Optional filter. String or list of strings:
+                        'class', 'asset', 'system', 'pattern', 'conversation'
+                      Example: ['class', 'asset'] — list both class and asset nodes.
+                      None = list all types.
+        limit:        Maximum nodes to show (default 50).
+    """
+    return await anyio.to_thread.run_sync(
+        lambda: _wiki_list_run(project_path, node_type, limit)
+    )
+
+
+@mcp.tool()
+async def wiki_get(project_path: str, node_id: str) -> str:
+    """
+    Read the full content of a wiki node by its ID.
+
+    Wiki nodes contain previously analyzed class structures, asset mappings,
+    engine system overviews, and pattern documentation accumulated across sessions.
+
+    USE THIS TOOL WHEN:
+    - wiki_search or wiki_list found a node you want to read in detail
+    - You want to review a cached analysis without triggering re-analysis
+
+    Node ID format: 'type:Name'
+    Examples: 'class:PlayerCharacter', 'asset:BP_GA_BasicAttack',
+              'system:gas', 'pattern:Singleton', 'class:DamageManager'
+
+    Args:
+        project_path: Absolute path to the project Scripts/Source directory.
+        node_id:      The wiki node ID (from wiki_list or wiki_search results).
+    """
+    return await anyio.to_thread.run_sync(
+        lambda: _wiki_get_run(project_path, node_id)
     )
 
 

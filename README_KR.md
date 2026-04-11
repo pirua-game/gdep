@@ -60,7 +60,7 @@ npm install -g gdep-mcp
 }
 ```
 
-설정 끝. 이제 Claude · Cursor · Gemini가 대화마다 게임 엔진 특화 **26개** 도구를 사용할 수 있습니다.
+설정 끝. 이제 Claude · Cursor · Gemini가 대화마다 게임 엔진 특화 **29개** 도구를 사용할 수 있습니다.
 
 ### MCP가 바꾸는 것
 
@@ -69,11 +69,14 @@ npm install -g gdep-mcp
 gdep MCP:   직접 의존 2개 · 간접 200개 이상 UI 클래스 · 에셋: prefabs/UI/combat.prefab
 ```
 
-### 26개 MCP 도구 한눈에 보기
+### 29개 MCP 도구 한눈에 보기
 
 | 도구 | 언제 사용 |
 |------|----------|
 | `get_project_context` | **항상 가장 먼저** — 전체 프로젝트 개요 |
+| `wiki_search` | **분석 전 항상 먼저** — 이미 분석된 클래스·에셋을 키워드로 검색 (FTS5 BM25). 캐시 히트 시 즉시 반환 |
+| `wiki_list` | wiki 전체 노드 목록 + staleness 상태 — 무엇이 이미 분석되었는지 확인 |
+| `wiki_get` | 특정 wiki 노드의 전체 분석 내용 읽기 |
 | `analyze_impact_and_risk` | 클래스·메서드 수정 전 안전성 확인 (`method_name=`으로 메서드 레벨 호출자 추적; `detail_level="summary"`로 빠른 요약) |
 | `explain_method_logic` | 단일 메서드 내부 제어 흐름 요약 (Guard/Branch/Loop/Always). C++ namespace 함수 지원. `include_source=True`로 메서드 본문 첨부 |
 | `trace_gameplay_flow` | C++ → Blueprint 호출 체인 추적 |
@@ -99,6 +102,23 @@ gdep MCP:   직접 의존 2개 · 간접 200개 이상 UI 클래스 · 에셋: p
 | `analyze_ue5_state_tree` | StateTree 에셋 구조 |
 | `analyze_ue5_animation` | ABP 상태 + Montage + GAS Notify |
 | `analyze_ue5_blueprint_mapping` | C++ 클래스 → Blueprint 구현체 매핑 — **신뢰도 헤더** 포함 |
+
+### Wiki — 분석 결과 캐시 시스템
+
+분석 결과는 `.gdep/wiki/`에 자동 저장되어 SQLite + FTS5로 인덱싱됩니다.
+wiki는 세션을 넘어 지식을 축적합니다 — **신규 분석 전 항상 `wiki_search` 먼저 호출하세요**.
+
+```
+wiki_search("좀비 어빌리티") → 이미 분석된 경우 즉시 반환
+wiki_list()                  → 캐시된 노드 목록 및 staleness 확인
+wiki_get("class:ZombieChar") → 전체 캐시 분석 내용 읽기
+```
+
+주요 기능:
+- FTS5 전문 검색 + BM25 랭킹 — CamelCase 인식 (`"GameplayAbility"` → `ULyraGameplayAbility` 매칭)
+- 의존성 엣지 자동 추출 (상속, UPROPERTY, Behavioral Dependencies)
+- Staleness 감지: 소스 파일 변경 시 재분석 안내
+- `wiki_search(related=True)`: 의존성 엣지를 통해 연관 노드까지 확장 검색
 
 ### UE5 신뢰도 투명화
 

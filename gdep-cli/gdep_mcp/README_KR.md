@@ -54,13 +54,30 @@ pip install gdep "mcp[cli]"
 
 ---
 
-## 🛠 도구 목록 (26개)
+## 🛠 도구 목록 (29개)
 
 ### 컨텍스트 도구 — 세션 시작 시 첫 호출 권장
 
 | 도구 | 설명 |
 |------|------|
 | `get_project_context` | 프로젝트 전체 개요. `.gdep/AGENTS.md` 있으면 읽고, 없으면 즉석 생성 |
+
+### Wiki 도구 — 신규 분석 전 먼저 사용 (3개)
+
+`explore_class_semantics`, `analyze_ue5_gas` 등 분석 결과는 `.gdep/wiki/`에 자동 저장되어 SQLite + FTS5로 인덱싱됩니다. wiki는 세션을 넘어 지식을 축적합니다.
+
+| 도구 | 설명 |
+|------|------|
+| `wiki_search` | **신규 분석 전 항상 먼저 호출.** 이미 분석된 클래스·에셋·시스템을 FTS5 BM25로 전문 검색. CamelCase 인식 — `"GameplayAbility"`로 `ULyraGameplayAbility` 검색 가능. `related=True` 시 의존성 엣지로 연관 노드 확장. 캐시 히트 시 즉시 반환. |
+| `wiki_list` | 전체 wiki 노드 목록 + staleness 상태. 소스 파일이 마지막 분석 이후 변경된 경우 `⚠ stale (source changed since YYYY-MM-DD)` 표시. |
+| `wiki_get` | 특정 wiki 노드의 전체 캐시 분석 내용 읽기. 노드 ID 형식: `class:ZombieCharacter`. |
+
+**권장 워크플로우:**
+```
+1. wiki_search("클래스 또는 개념") → 캐시 히트 시 즉시 반환, staleness 확인
+2. stale 또는 미발견 → explore_class_semantics / analyze_ue5_gas / etc.
+3. 분석 결과 자동 저장 → 다음 세션에서 즉시 활용
+```
 
 ### High-level 의도 기반 도구 (14개)
 

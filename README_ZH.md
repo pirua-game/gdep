@@ -60,7 +60,7 @@ npm install -g gdep-mcp
 }
 ```
 
-配置完成。Claude · Cursor · Gemini 每次对话都可使用 **26 个**游戏引擎专属工具。
+配置完成。Claude · Cursor · Gemini 每次对话都可使用 **29 个**游戏引擎专属工具。
 
 ### MCP 改变什么
 
@@ -69,11 +69,14 @@ npm install -g gdep-mcp
 gdep MCP:   直接依赖 2 个 · 间接 200+ UI 类 · 资源: prefabs/UI/combat.prefab
 ```
 
-### 26 个 MCP 工具一览
+### 29 个 MCP 工具一览
 
 | 工具 | 使用时机 |
 |------|---------|
 | `get_project_context` | **始终最先调用** — 项目整体概览 |
+| `wiki_search` | **新分析前始终最先调用** — FTS5 BM25 关键字搜索已分析的类和资源。CamelCase 感知。缓存命中时即时返回 |
+| `wiki_list` | 全部 wiki 节点列表 + staleness 状态确认 |
+| `wiki_get` | 读取特定 wiki 节点的完整分析内容 |
 | `analyze_impact_and_risk` | 修改类或方法前的安全确认（`method_name=` 追踪方法级调用方；`detail_level="summary"` 快速摘要） |
 | `explain_method_logic` | 单个方法内部控制流摘要 — Guard/Branch/Loop/Always。支持 C++ namespace 函数。`include_source=True` 附加方法体源码 |
 | `trace_gameplay_flow` | C++ → Blueprint 调用链追踪 |
@@ -99,6 +102,23 @@ gdep MCP:   直接依赖 2 个 · 间接 200+ UI 类 · 资源: prefabs/UI/comba
 | `analyze_ue5_state_tree` | StateTree 资源结构 |
 | `analyze_ue5_animation` | ABP 状态 + Montage + GAS Notify |
 | `analyze_ue5_blueprint_mapping` | C++ 类 → Blueprint 实现映射 — 包含**置信度标头** |
+
+### Wiki — 分析结果缓存
+
+分析结果自动保存至 `.gdep/wiki/`，并通过 SQLite + FTS5 建立索引。
+wiki 跨会话积累知识 — **新分析前始终先调用 `wiki_search`**。
+
+```
+wiki_search("zombie ability")   → 已分析则即时返回
+wiki_list()                    → 查看所有缓存节点与 staleness 状态
+wiki_get("class:ZombieChar")   → 读取特定节点的完整缓存分析内容
+```
+
+主要功能:
+- FTS5 全文搜索（BM25 排名）— CamelCase 感知（`"GameplayAbility"` 可找到 `ULyraGameplayAbility`）
+- 依赖边自动提取（继承、UPROPERTY、行为依赖）
+- Staleness 检测：源文件在最后分析之后发生变更时标记
+- `related=True` 通过依赖边展开关联节点
 
 ### UE5 置信度透明化
 

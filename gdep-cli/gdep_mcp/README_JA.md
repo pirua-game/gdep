@@ -40,7 +40,7 @@ pip install gdep "mcp[cli]"
 
 ---
 
-## 🛠 ツール一覧（26個）
+## 🛠 ツール一覧（29個）
 
 ### コンテキストツール
 
@@ -48,7 +48,24 @@ pip install gdep "mcp[cli]"
 |--------|------|
 | `get_project_context` | **セッション開始時に最初に呼び出す** — プロジェクト全体概要 |
 
-### ハイレベル意図ベースツール（14個）
+### Wiki ツール — 新規分析前に使用（3個）
+
+`explore_class_semantics`、`analyze_ue5_gas` などの分析結果は `.gdep/wiki/` に自動保存され、SQLite + FTS5 でインデックス化されます。wiki はセッションをまたいで知識を蓄積します。
+
+| ツール | 説明 |
+|--------|------|
+| `wiki_search` | **新規分析前に必ず最初に呼び出す。** 分析済みクラス・アセット・システムを FTS5 BM25 で全文検索。CamelCase 対応 — `"GameplayAbility"` で `ULyraGameplayAbility` を検索可能。`related=True` で依存エッジを介して関連ノードに拡張。キャッシュヒット時は即時返答。 |
+| `wiki_list` | wiki 全ノード一覧 + staleness ステータス。最終分析以降にソースファイルが変更された場合 `⚠ stale (source changed since YYYY-MM-DD)` 表示。 |
+| `wiki_get` | 特定 wiki ノードの完全なキャッシュ分析内容を読む。ノード ID 形式: `class:ZombieCharacter`。 |
+
+**推奨ワークフロー:**
+```
+1. wiki_search("クラスまたはコンセプト") → キャッシュヒット時は即時返答、staleness 確認
+2. stale または未発見 → explore_class_semantics / analyze_ue5_gas / etc.
+3. 分析結果を自動保存 → 次のセッションで即座に活用
+```
+
+### ハイレベル意図ベースツール（16個）
 
 | ツール | 説明 |
 |--------|------|

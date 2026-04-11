@@ -693,16 +693,37 @@ def _build_agents_md(project_path: str) -> str:
         "",
     ]
 
-    # 3. 빠른 스캔 스냅샷
-    _append_scan_snapshot(lines, profile, src_path)
+    # 3. Project Wiki 섹션 (분석 개요는 .gdep/wiki/OVERVIEW.md 참조)
+    lines += [
+        "## Project Wiki",
+        "",
+        "This project maintains a **persistent wiki** at `.gdep/wiki/`.",
+        "The wiki accumulates analysis results across sessions — check it first before running fresh analysis.",
+        "",
+        "| Page | Path | Contents |",
+        "|------|------|----------|",
+        "| Project Overview | `.gdep/wiki/OVERVIEW.md` | Class counts, coupling, cycles, engine systems |",
+        "| Class nodes | `.gdep/wiki/classes/{ClassName}.md` | Per-class structure, deps, lint |",
+        "| Asset nodes | `.gdep/wiki/assets/{AssetName}.md` | Blueprints, prefabs, animators |",
+        "| System nodes | `.gdep/wiki/systems/{SystemName}.md` | GAS, AI, animation pipelines |",
+        "| Pattern nodes | `.gdep/wiki/patterns/{PatternName}.md` | Detected architectural patterns |",
+        "| Full index | `.gdep/wiki/index.md` | Catalog of all wiki pages |",
+        "",
+        "### Wiki-First Workflow",
+        "```",
+        "# 1. Check what's already been analyzed",
+        "wiki_list(project_path)                    # see all cached nodes",
+        "wiki_search(project_path, \"damage\")        # find specific topics",
+        "wiki_get(project_path, \"class:PlayerChar\") # read a cached node",
+        "",
+        "# 2. Only run fresh analysis if the wiki node is missing or stale",
+        "explore_class_semantics(path, cls)         # auto-saves result to wiki",
+        "analyze_impact_and_risk(path, cls)          # auto-saves result to wiki",
+        "```",
+        "",
+    ]
 
-    # 4. 엔진 전용 컨텍스트
-    if profile.kind == ProjectKind.UNREAL:
-        _append_ue5_context(lines, src_path)
-    elif profile.kind == ProjectKind.UNITY:
-        _append_unity_context(lines, src_path)
-
-    # 5. Quick Reference + 엔진별 세션 플로우
+    # 4. Quick Reference + 엔진별 세션 플로우
     lines.append(_QUICK_REF_COMMON)
     if profile.kind == ProjectKind.UNREAL:
         lines.append(_SESSION_FLOW_UE5)
@@ -714,6 +735,47 @@ def _build_agents_md(project_path: str) -> str:
     lines += [
         "---",
         "*Regenerate this file: `gdep init <project_path> --force`*",
+        "",
+    ]
+
+    return "\n".join(lines)
+
+
+def _build_overview_md(project_path: str) -> str:
+    """게임 프로젝트 분석 개요 문서 (.gdep/wiki/OVERVIEW.md) 생성."""
+    profile = detect(project_path)
+    src_path = str(profile.source_dirs[0]) if profile.source_dirs else str(profile.root)
+    lines: list[str] = []
+
+    lines += [
+        "---",
+        "title: Project Overview",
+        "type: overview",
+        f"engine: {profile.display}",
+        f"updated: {datetime.now().strftime('%Y-%m-%d')}",
+        "stale: false",
+        "---",
+        "",
+        f"# {profile.name} — Project Overview",
+        "",
+        f"> Engine: {profile.display}  |  Source: `{src_path}`",
+        f"> Generated: {datetime.now().strftime('%Y-%m-%d')}",
+        f"> Regenerate: `gdep init <project_path> --force`",
+        "",
+    ]
+
+    # 스캔 스냅샷 (기존 _append_scan_snapshot 로직 재사용)
+    _append_scan_snapshot(lines, profile, src_path)
+
+    # 엔진 전용 컨텍스트
+    if profile.kind == ProjectKind.UNREAL:
+        _append_ue5_context(lines, src_path)
+    elif profile.kind == ProjectKind.UNITY:
+        _append_unity_context(lines, src_path)
+
+    lines += [
+        "---",
+        "See [[index]] for the full wiki page catalog.",
         "",
     ]
 
@@ -831,6 +893,42 @@ def _append_unity_context(lines: list[str], src_path: str) -> None:
 
 
 # ─────────────────────────────────────────────────────────────
+# Wiki 초기 템플릿
+# ─────────────────────────────────────────────────────────────
+
+_WIKI_INDEX_TEMPLATE = """\
+# Wiki Index
+
+> Auto-maintained by gdep. Updated when analysis tools run.
+> Read `.gdep/wiki/OVERVIEW.md` for the project architecture overview.
+
+## Overview
+- [[OVERVIEW]] — Project architecture overview (class count, coupling, engine systems)
+
+## Classes
+<!-- Auto-populated as explore_class_semantics is called -->
+
+## Assets
+<!-- Auto-populated as asset analysis tools are called -->
+
+## Systems
+<!-- Auto-populated as engine system analysis runs -->
+
+## Patterns
+<!-- Auto-populated as detect_patterns is called -->
+
+## Conversations
+<!-- Auto-populated as agent conversations are ingested -->
+"""
+
+_WIKI_LOG_TEMPLATE = """\
+# Wiki Activity Log
+
+> Append-only log of wiki updates. Format: `## [YYYY-MM-DD] action | description`
+
+"""
+
+# ─────────────────────────────────────────────────────────────
 # AGENTS.md freshness — fingerprint + metadata
 # ─────────────────────────────────────────────────────────────
 
@@ -920,19 +1018,43 @@ def build_context_output(project_path: str) -> str:
     get_project_context MCP 도구 및 `gdep context` CLI에서 호출.
     .gdep/AGENTS.md가 있고 fresh하면 그걸 읽고,
     stale이거나 없으면 자동 재생성 후 반환.
+    OVERVIEW.md도 함께 반환하여 Agent가 프로젝트 상태를 바로 파악할 수 있게 한다.
     """
     profile = detect(project_path)
-    agents_md = Path(profile.root) / ".gdep" / "AGENTS.md"
+    gdep_dir = Path(profile.root) / ".gdep"
+    agents_md_path = gdep_dir / "AGENTS.md"
 
-    if agents_md.exists() and _is_agents_md_fresh(profile):
-        return agents_md.read_text(encoding="utf-8")
+    if agents_md_path.exists() and _is_agents_md_fresh(profile):
+        agents_content = agents_md_path.read_text(encoding="utf-8")
+    else:
+        # stale 또는 missing → 자동 재생성
+        try:
+            agents_md_path = write_agents_md(project_path, force=True)
+            agents_content = agents_md_path.read_text(encoding="utf-8")
+        except Exception:
+            agents_content = _build_agents_md(project_path)
 
-    # stale 또는 missing → 자동 재생성
-    try:
-        agents_md = write_agents_md(project_path, force=True)
-        return agents_md.read_text(encoding="utf-8")
-    except Exception:
-        return _build_agents_md(project_path)
+    # OVERVIEW.md가 없으면 wiki scaffold 생성
+    overview_path = gdep_dir / "wiki" / "OVERVIEW.md"
+    if not overview_path.exists():
+        try:
+            _ensure_wiki_scaffold(gdep_dir, project_path, force=False)
+        except Exception:
+            pass
+
+    # AGENTS.md + OVERVIEW.md 합쳐서 반환
+    overview_content = ""
+    if overview_path.exists():
+        try:
+            overview_content = (
+                "\n\n---\n\n## Project Analysis Overview\n"
+                "> Source: `.gdep/wiki/OVERVIEW.md`\n\n"
+                + overview_path.read_text(encoding="utf-8")
+            )
+        except Exception:
+            pass
+
+    return agents_content + overview_content
 
 
 def _ensure_gitignore(project_root: Path) -> None:
@@ -995,5 +1117,48 @@ def write_agents_md(project_path: str, force: bool = False) -> Path:
     if help_needs_regen:
         help_md.write_text(_build_help_md(project_path), encoding="utf-8")
 
+    # Wiki 디렉토리 + OVERVIEW.md 생성
+    _ensure_wiki_scaffold(gdep_dir, project_path, force=force)
+
     return agents_md
+
+
+def _ensure_wiki_scaffold(gdep_dir: Path, project_path: str, force: bool = False) -> None:
+    """
+    .gdep/wiki/ 디렉토리 구조와 초기 파일(OVERVIEW.md, index.md, log.md)을 생성.
+    OVERVIEW.md는 stale이거나 force=True일 때만 재생성.
+    """
+    wiki_dir = gdep_dir / "wiki"
+    # 디렉토리 구조 생성
+    for sub in ("classes", "assets", "systems", "patterns", "conversations"):
+        (wiki_dir / sub).mkdir(parents=True, exist_ok=True)
+
+    # OVERVIEW.md: 항상 최신 분석 결과로 업데이트 (fingerprint 기반 캐시는 .agents_meta.json이 관리)
+    overview_path = wiki_dir / "OVERVIEW.md"
+    if not overview_path.exists() or force:
+        try:
+            overview_content = _build_overview_md(project_path)
+            overview_path.write_text(overview_content, encoding="utf-8")
+        except Exception:
+            pass  # OVERVIEW.md 생성 실패는 치명적이지 않음
+
+    # index.md: 없을 때만 초기 생성
+    index_path = wiki_dir / "index.md"
+    if not index_path.exists():
+        index_path.write_text(_WIKI_INDEX_TEMPLATE, encoding="utf-8")
+
+    # log.md: 없을 때만 초기 생성
+    log_path = wiki_dir / "log.md"
+    if not log_path.exists():
+        log_path.write_text(_WIKI_LOG_TEMPLATE, encoding="utf-8")
+
+    # .wiki_meta.json: 없을 때만 초기 생성
+    meta_path = wiki_dir / ".wiki_meta.json"
+    if not meta_path.exists():
+        import json as _json
+        meta_path.write_text(
+            _json.dumps({"version": 1, "gdep_version": __version__, "nodes": {}},
+                        ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
 

@@ -37,6 +37,10 @@ def run(project_path: str, class_name: str,
     prepends a cached 3-line AI role summary. If LLM is not configured, returns
     the raw class structure only — the calling AI agent can summarize from context.
 
+    Results are cached in the project wiki (.gdep/wiki/classes/).
+    On subsequent calls with the same class, the cached wiki page is returned
+    immediately (no re-analysis) unless the source file has changed or refresh=True.
+
     Use this tool to:
     - Quickly understand what an unfamiliar class does
     - Get structured context before asking deeper questions about a class
@@ -48,7 +52,7 @@ def run(project_path: str, class_name: str,
                           Examples: "ManagerBattle", "AHSAttributeSet"
         summarize:        Generate AI 3-line summary if LLM is configured (gdep config llm).
                           If not configured, returns structure only. Default True.
-        refresh:          Ignore cache and regenerate summary. Default False.
+        refresh:          Ignore wiki cache and re-analyze. Default False.
         include_source:   Also return the class source code appended after the structure.
                           Eliminates the need for a separate read_class_source call.
                           Default False (backward compatible).
@@ -61,42 +65,68 @@ def run(project_path: str, class_name: str,
         Full class structure (fields, methods, refs) with optional AI summary and source.
     """
     try:
-        profile = detect(project_path)
-
-        # LLM 설정 여부 사전 확인 — stdin 대화형 설정(_configure_interactively) 방지
-        llm_available = False
-        if summarize:
+        # include_source가 아니면 항상 wiki 레이어를 통과 (refresh=True여도 저장)
+        if not include_source:
             try:
-                from gdep.llm_provider import load_config
-                llm_available = load_config() is not None
+                from gdep.wiki.cache_layer import wiki_cached_class
+                from gdep.detector import detect as _detect
+
+                def _analyze():
+                    return _do_analyze(project_path, class_name, summarize,
+                                       refresh, include_source, max_source_chars, compact)
+
+                profile = _detect(project_path)
+                engine = profile.display if profile else ""
+                return wiki_cached_class(project_path, class_name, _analyze, engine,
+                                         refresh=refresh)
             except Exception:
-                pass
+                pass  # wiki 레이어 실패 시 기존 방식으로 fall-through
 
-        result = runner.describe(profile, class_name,
-                                 fmt="console",
-                                 summarize=(summarize and llm_available),
-                                 refresh=refresh)
-        if not result.ok:
-            return f"Could not describe class '{class_name}': {result.error_message}"
-
-        output = result.stdout
-
-        if compact:
-            output = _compact_output(output)
-
-        output += confidence_footer(ConfidenceTier.HIGH, "source parsing")
-
-        if include_source:
-            src_result = runner.read_source(profile, class_name, max_chars=max_source_chars)
-            if src_result.ok and src_result.stdout.strip():
-                output += f"\n\n## Source Code: {class_name}\n{src_result.stdout}"
-            elif not src_result.ok:
-                output += f"\n\n[Source not available: {src_result.error_message}]"
-
-        return output
+        return _do_analyze(project_path, class_name, summarize, refresh,
+                           include_source, max_source_chars, compact)
 
     except Exception as e:
         return f"[explore_class_semantics] Error: {e}"
+
+
+def _do_analyze(project_path: str, class_name: str,
+                summarize: bool, refresh: bool,
+                include_source: bool, max_source_chars: int,
+                compact: bool) -> str:
+    """실제 분석 로직 (wiki 레이어 없이 바로 실행)."""
+    profile = detect(project_path)
+
+    # LLM 설정 여부 사전 확인 — stdin 대화형 설정(_configure_interactively) 방지
+    llm_available = False
+    if summarize:
+        try:
+            from gdep.llm_provider import load_config
+            llm_available = load_config() is not None
+        except Exception:
+            pass
+
+    result = runner.describe(profile, class_name,
+                             fmt="console",
+                             summarize=(summarize and llm_available),
+                             refresh=refresh)
+    if not result.ok:
+        return f"Could not describe class '{class_name}': {result.error_message}"
+
+    output = result.stdout
+
+    if compact:
+        output = _compact_output(output)
+
+    output += confidence_footer(ConfidenceTier.HIGH, "source parsing")
+
+    if include_source:
+        src_result = runner.read_source(profile, class_name, max_chars=max_source_chars)
+        if src_result.ok and src_result.stdout.strip():
+            output += f"\n\n## Source Code: {class_name}\n{src_result.stdout}"
+        elif not src_result.ok:
+            output += f"\n\n[Source not available: {src_result.error_message}]"
+
+    return output
 
 
 # ── Compact output post-processor ─────────────────────────────
