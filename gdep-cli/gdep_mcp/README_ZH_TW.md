@@ -54,7 +54,7 @@ pip install gdep "mcp[cli]"
 
 ---
 
-## 🛠 工具清單（26 個）
+## 🛠 工具清單（29 個）
 
 ### 上下文工具
 
@@ -62,7 +62,24 @@ pip install gdep "mcp[cli]"
 |------|------|
 | `get_project_context` | **工作階段開始時首先呼叫** — 專案整體概覽 |
 
-### 高層意圖工具（14 個）
+### Wiki 工具 — 新分析前先使用（3 個）
+
+`explore_class_semantics`、`analyze_ue5_gas` 等分析結果會自動儲存至 `.gdep/wiki/`，並透過 SQLite + FTS5 建立索引。wiki 跨工作階段累積知識。
+
+| 工具 | 說明 |
+|------|------|
+| `wiki_search` | **新分析前始終最先呼叫。** FTS5 BM25 全文搜尋已分析的類別、資源和系統。CamelCase 感知 — `"GameplayAbility"` 可找到 `ULyraGameplayAbility`。`related=True` 透過相依邊展開關聯節點。快取命中時即時返回。 |
+| `wiki_list` | 全部 wiki 節點清單 + staleness 狀態。原始檔在最後分析之後發生變更時顯示 `⚠ stale (source changed since YYYY-MM-DD)`。 |
+| `wiki_get` | 讀取特定 wiki 節點的完整快取分析內容。節點 ID 格式：`class:ZombieCharacter`。 |
+
+**推薦工作流程：**
+```
+1. wiki_search("類別名稱或概念") → 快取命中時即時返回，確認 staleness
+2. stale 或未找到 → explore_class_semantics / analyze_ue5_gas / etc.
+3. 分析結果自動儲存 → 下次工作階段立即可用
+```
+
+### 高層意圖工具（16 個）
 
 | 工具 | 說明 |
 |------|------|

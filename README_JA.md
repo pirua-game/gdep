@@ -59,7 +59,7 @@ npm install -g gdep-mcp
 }
 ```
 
-設定完了。Claude · Cursor · Gemini が毎会話でゲームエンジン特化の **26 個** のツールを使えます。
+設定完了。Claude · Cursor · Gemini が毎会話でゲームエンジン特化の **29 個** のツールを使えます。
 
 ### MCP が変えること
 
@@ -68,11 +68,14 @@ npm install -g gdep-mcp
 gdep MCP:   直接依存 2 件 · 間接 200 件以上の UI クラス · アセット: prefabs/UI/combat.prefab
 ```
 
-### MCP ツール一覧（26 個）
+### MCP ツール一覧（29 個）
 
 | ツール | 使用タイミング |
 |--------|-------------|
 | `get_project_context` | **必ず最初に呼び出す** — プロジェクト全体概要 |
+| `wiki_search` | **新規分析前に必ず最初に呼び出す** — 分析済みクラス・アセットをFTS5 BM25でキーワード検索。CamelCase対応。キャッシュヒット時は即時返答 |
+| `wiki_list` | wikiノード全一覧 + stalenessステータス確認 |
+| `wiki_get` | 特定wikiノードの完全な分析内容を読む |
 | `analyze_impact_and_risk` | クラス・メソッド変更前の安全確認（`method_name=` でメソッドレベル呼び出し元追跡; `detail_level="summary"` で高速要約） |
 | `explain_method_logic` | 単一メソッドの内部制御フロー要約 — Guard/Branch/Loop/Always。C++ namespace 関数対応。`include_source=True` でメソッド本文を追加 |
 | `trace_gameplay_flow` | C++ → Blueprint 呼び出しチェーン追跡 |
@@ -98,6 +101,23 @@ gdep MCP:   直接依存 2 件 · 間接 200 件以上の UI クラス · アセ
 | `analyze_ue5_state_tree` | StateTree アセット構造 |
 | `analyze_ue5_animation` | ABP 状態 + Montage + GAS Notify |
 | `analyze_ue5_blueprint_mapping` | C++ クラス → Blueprint 実装マッピング — **信頼度ヘッダー**を含む |
+
+### Wiki — 分析結果キャッシュ
+
+分析結果は自動的に `.gdep/wiki/` に保存され、SQLite + FTS5 でインデックス化されます。
+wiki はセッションをまたいで知識を蓄積します — **新規分析前に必ず `wiki_search` を呼び出してください**。
+
+```
+wiki_search("zombie ability")   → 分析済みなら即時返答
+wiki_list()                    → キャッシュ済みノードと staleness 状態の一覧
+wiki_get("class:ZombieChar")   → キャッシュされた完全な分析内容
+```
+
+主な機能:
+- FTS5 全文検索（BM25 ランキング）— CamelCase 対応（`"GameplayAbility"` で `ULyraGameplayAbility` を検索可能）
+- 依存エッジ自動抽出（継承、UPROPERTY、依存関係）
+- Staleness 検出: ソースファイルが最終分析以降に変更された場合にフラグ
+- `related=True` で依存エッジを介して関連ノードに拡張
 
 ### UE5 信頼度透明化
 

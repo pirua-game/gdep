@@ -119,11 +119,14 @@ Claude Desktop config (`claude_desktop_config.json`):
 }
 ```
 
-### MCP Tools (26)
+### MCP Tools (29)
 
 | Tool | Scenario |
 |------|----------|
 | `get_project_context` | **Call first** — full project overview |
+| `wiki_search` | **Call before any analysis** — keyword search over previously analyzed classes/assets (FTS5 BM25). Instant if cached |
+| `wiki_list` | List all wiki nodes with staleness status |
+| `wiki_get` | Read full cached analysis of a specific wiki node |
 | `analyze_impact_and_risk` | Safety check before modifying a class or method (`method_name=` for method-level callers) |
 | `trace_gameplay_flow` | Trace how a feature works (C++→BP). `summary=True` for compact output |
 | `inspect_architectural_health` | Full tech debt diagnosis |

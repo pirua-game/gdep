@@ -57,13 +57,30 @@ pip install gdep "mcp[cli]"
 
 ---
 
-## 🛠 Available Tools (26)
+## 🛠 Available Tools (29)
 
 ### Context Tool — call first at session start
 
 | Tool | Description |
 |------|-------------|
 | `get_project_context` | Full project overview. Reads `.gdep/AGENTS.md` if present, otherwise generates on-the-fly |
+
+### Wiki Tools — use before fresh analysis (3)
+
+Analysis results from `explore_class_semantics`, `analyze_ue5_gas`, etc. are automatically saved to `.gdep/wiki/` and indexed with SQLite + FTS5. The wiki accumulates knowledge across sessions.
+
+| Tool | Description |
+|------|-------------|
+| `wiki_search` | **Call before running fresh analysis.** Full-text search (FTS5 BM25) across all previously analyzed classes, assets, and systems. CamelCase-aware — `"GameplayAbility"` finds `ULyraGameplayAbility`. `related=True` expands via dependency edges. Instant if cached. |
+| `wiki_list` | List all wiki nodes with staleness status. Shows `⚠ stale (source changed since YYYY-MM-DD)` when the source file has changed since last analysis. |
+| `wiki_get` | Read full cached analysis content for a specific wiki node by ID (e.g. `class:ZombieCharacter`). |
+
+**Recommended workflow:**
+```
+1. wiki_search("class or concept") → instant if cached, shows staleness
+2. If stale or not found → explore_class_semantics / analyze_ue5_gas / etc.
+3. Results auto-saved to wiki for next session
+```
 
 ### High-level Intent Tools (16)
 
