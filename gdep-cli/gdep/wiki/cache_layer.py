@@ -23,6 +23,7 @@ from .models import WikiNode
 from .store import WikiStore, make_node_id, make_file_path
 from .node_writer import make_class_page, make_asset_page, make_system_page, make_pattern_page
 from .staleness import is_node_stale, get_class_fingerprint, get_project_fingerprint
+from .edge_extractor import extract_edges
 from .index import rebuild_index
 from pathlib import Path
 
@@ -56,12 +57,16 @@ def wiki_cached_class(project_path: str, class_name: str,
 
     current_fp = get_class_fingerprint(project_path, class_name)
 
-    if not refresh and node and not node.stale and not is_node_stale(node.source_fingerprint, current_fp):
-        # fresh → 위키 내용 반환
+    was_cached = (not refresh and node
+                  and not node.stale
+                  and not is_node_stale(node.source_fingerprint, current_fp))
+
+    if was_cached:
+        # fresh → 위키 본문 반환 (frontmatter 제거됨)
         cached = store.read_content(node)
         return cached + "\n\n> *[wiki] Returned from wiki cache. Run with refresh=True to force re-analysis.*"
 
-    # 분석 실행
+    # stale 또는 refresh=True → 재분석 실행
     result = analyzer_fn()
 
     # 위키에 저장
@@ -82,13 +87,22 @@ def wiki_cached_class(project_path: str, class_name: str,
     store.upsert(new_node, page_content)
     store.append_log("analyze", f"class:{class_name}")
 
+    # 의존성 엣지 추출 및 저장 (분석 결과에서 References/Referenced By 파싱)
+    try:
+        edges = extract_edges(node_id, result)
+        if edges:
+            store.upsert_edges(node_id, edges)
+    except Exception:
+        pass
+
     # index.md 갱신
     try:
         rebuild_index(_wiki_dir(project_path))
     except Exception:
         pass
 
-    return result
+    footer = "\n\n> *[wiki] Re-analyzed and wiki updated.*" if node else "\n\n> *[wiki] Analyzed and saved to wiki.*"
+    return result + footer
 
 
 def wiki_cached_asset(project_path: str, asset_name: str,
@@ -103,7 +117,7 @@ def wiki_cached_asset(project_path: str, asset_name: str,
 
     if node and not node.stale and not is_node_stale(node.source_fingerprint, current_fp):
         cached = store.read_content(node)
-        return cached + "\n\n> *[wiki] Returned from wiki cache.*"
+        return cached + "\n\n> *[wiki] Returned from wiki cache. Run with refresh=True to force re-analysis.*"
 
     result = analyzer_fn()
 
@@ -124,12 +138,21 @@ def wiki_cached_asset(project_path: str, asset_name: str,
     store.upsert(new_node, page_content)
     store.append_log("analyze", f"asset:{asset_name}")
 
+    # 에셋 분석 결과에서도 엣지 추출 시도
+    try:
+        edges = extract_edges(node_id, result)
+        if edges:
+            store.upsert_edges(node_id, edges)
+    except Exception:
+        pass
+
     try:
         rebuild_index(_wiki_dir(project_path))
     except Exception:
         pass
 
-    return result
+    footer = "\n\n> *[wiki] Re-analyzed and wiki updated.*" if node else "\n\n> *[wiki] Analyzed and saved to wiki.*"
+    return result + footer
 
 
 def wiki_cached_system(project_path: str, system_name: str,
@@ -144,7 +167,7 @@ def wiki_cached_system(project_path: str, system_name: str,
 
     if node and not node.stale and not is_node_stale(node.source_fingerprint, current_fp):
         cached = store.read_content(node)
-        return cached + "\n\n> *[wiki] Returned from wiki cache.*"
+        return cached + "\n\n> *[wiki] Returned from wiki cache. Run with refresh=True to force re-analysis.*"
 
     result = analyzer_fn()
 
@@ -166,8 +189,16 @@ def wiki_cached_system(project_path: str, system_name: str,
     store.append_log("analyze", f"system:{system_name}")
 
     try:
+        edges = extract_edges(node_id, result)
+        if edges:
+            store.upsert_edges(node_id, edges)
+    except Exception:
+        pass
+
+    try:
         rebuild_index(_wiki_dir(project_path))
     except Exception:
         pass
 
-    return result
+    footer = "\n\n> *[wiki] Re-analyzed and wiki updated.*" if node else "\n\n> *[wiki] Analyzed and saved to wiki.*"
+    return result + footer

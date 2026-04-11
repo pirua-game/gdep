@@ -14,7 +14,7 @@ if str(_GDEP_ROOT) not in sys.path:
 
 
 def run(project_path: str,
-        node_type: str | None = None,
+        node_type: str | list[str] | None = None,
         limit: int = 50) -> str:
     """
     List all wiki nodes for this project (previously analyzed classes, assets, systems).
@@ -24,8 +24,10 @@ def run(project_path: str,
 
     Args:
         project_path: Absolute path to the project Scripts/Source directory.
-        node_type:    Optional filter: 'class', 'asset', 'system', 'pattern', 'conversation'.
-                      If None, lists all node types.
+        node_type:    Optional filter. Single string or list:
+                        'class', 'asset', 'system', 'pattern', 'conversation'
+                        or e.g. ['class', 'asset'] to list multiple types.
+                      None = lists all node types.
         limit:        Maximum nodes to show (default 50).
 
     Returns:
@@ -43,7 +45,10 @@ def run(project_path: str,
         nodes = store.list_nodes(node_type=node_type, limit=limit)
 
         if not nodes:
-            type_note = f" of type '{node_type}'" if node_type else ""
+            if isinstance(node_type, list):
+                type_note = f" of types {node_type}"
+            else:
+                type_note = f" of type '{node_type}'" if node_type else ""
             return (
                 f"No wiki nodes found{type_note}.\n\n"
                 "The wiki is empty. Run analysis tools to populate it:\n"
@@ -107,7 +112,11 @@ def run(project_path: str,
             lines.append("| Node ID | Updated | Stale |")
             lines.append("|---------|---------|-------|")
             for n in sorted(type_nodes, key=lambda x: x.title):
-                stale = "⚠ Yes" if _is_stale_live(n) else "✓ No"
+                if _is_stale_live(n):
+                    since = f" since {n.updated_at}" if n.updated_at else ""
+                    stale = f"⚠ stale (source changed{since})"
+                else:
+                    stale = "✓ fresh"
                 lines.append(f"| `{n.id}` | {n.updated_at} | {stale} |")
             lines.append("")
 
@@ -117,8 +126,8 @@ def run(project_path: str,
         )
         if stale_count:
             lines.append(
-                f"\n> ⚠ **{stale_count} node(s) are stale** — source files have changed."
-                " Re-run `explore_class_semantics` (or the relevant analysis tool) to refresh."
+                f"\n> ⚠ **{stale_count} node(s) are stale** — source files have changed since last analysis."
+                " Re-run `explore_class_semantics` (or the relevant analysis tool) with `refresh=True` to update."
             )
 
         return "\n".join(lines)

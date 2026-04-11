@@ -1,10 +1,16 @@
 """
 gdep.wiki.models
-WikiNode 데이터 모델.
+WikiNode / WikiEdge 데이터 모델.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
+# ── Edge relation constants ────────────────────────────────────
+EDGE_DEPENDS_ON    = "depends_on"
+EDGE_REFERENCED_BY = "referenced_by"
+EDGE_INHERITS      = "inherits"
+EDGE_USES_ASSET    = "uses_asset"
 
 
 @dataclass
@@ -56,3 +62,16 @@ class WikiNode:
             stale=d.get("stale", False),
             meta=d.get("meta", {}),
         )
+
+
+@dataclass
+class WikiEdge:
+    """위키 노드 간 의존성 엣지.
+
+    source / target: 'class:BattleCore', 'asset:BP_GA_BasicAttack' 등 위키 노드 ID.
+    relation: EDGE_* 상수 중 하나.
+    """
+    source: str      # 'class:BattleCore'
+    target: str      # 'class:PlayingCard'
+    relation: str    # 'depends_on' | 'referenced_by' | 'inherits' | 'uses_asset'
+    weight: float = 1.0

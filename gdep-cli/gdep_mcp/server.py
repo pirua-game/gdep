@@ -1070,10 +1070,14 @@ async def read_class_source(project_path: str, class_name: str,
 
 @mcp.tool()
 async def wiki_search(project_path: str, query: str,
-                      node_type: str | None = None,
+                      node_type: str | list[str] | None = None,
+                      related: bool = False,
                       limit: int = 20) -> str:
     """
     Search the project wiki for previously analyzed classes, assets, and systems.
+
+    Uses FTS5 full-text search with BM25 ranking — finds nodes even when you
+    don't know the exact class name. Multi-word queries are OR'd automatically.
 
     USE THIS TOOL FIRST before running fresh analysis tools.
     The wiki accumulates analysis results across sessions — if a class or asset
@@ -1081,25 +1085,32 @@ async def wiki_search(project_path: str, query: str,
 
     USE THIS TOOL WHEN:
     - You want to check if a class/asset has already been analyzed
-    - You want to find all analyzed entities related to a topic (e.g. "damage", "ability")
+    - You want to find all analyzed entities related to a concept (e.g. "damage", "ability", "zombie AI")
     - You want to see what the team has already explored in previous sessions
+    - You want to find classes related to a known class (use related=True)
 
-    Returns matching wiki nodes with titles, types, and content snippets.
+    Returns matching wiki nodes with BM25 relevance scores and content snippets.
 
     Args:
         project_path: Absolute path to the project Scripts/Source directory.
-        query:        Search keyword or phrase. Examples: "damage", "PlayerCharacter", "GAS"
-        node_type:    Optional filter: 'class', 'asset', 'system', 'pattern', 'conversation'.
+        query:        Search keyword or phrase. Multi-word is OR'd.
+                      Examples: "damage", "PlayerCharacter", "GAS ability", "zombie AI"
+        node_type:    Optional filter. String or list of strings:
+                        'class', 'asset', 'system', 'pattern', 'conversation'
+                      Example: ['class', 'asset'] — search both types.
+                      None = search all types.
+        related:      If True, also includes nodes connected via dependency edges.
+                      Useful for finding related classes without knowing their names.
         limit:        Maximum results to return (default 20).
     """
     return await anyio.to_thread.run_sync(
-        lambda: _wiki_search_run(project_path, query, node_type, limit)
+        lambda: _wiki_search_run(project_path, query, node_type, related, limit)
     )
 
 
 @mcp.tool()
 async def wiki_list(project_path: str,
-                    node_type: str | None = None,
+                    node_type: str | list[str] | None = None,
                     limit: int = 50) -> str:
     """
     List all wiki nodes for this project — previously analyzed classes, assets, and systems.
@@ -1113,7 +1124,10 @@ async def wiki_list(project_path: str,
 
     Args:
         project_path: Absolute path to the project Scripts/Source directory.
-        node_type:    Optional filter: 'class', 'asset', 'system', 'pattern', 'conversation'.
+        node_type:    Optional filter. String or list of strings:
+                        'class', 'asset', 'system', 'pattern', 'conversation'
+                      Example: ['class', 'asset'] — list both class and asset nodes.
+                      None = list all types.
         limit:        Maximum nodes to show (default 50).
     """
     return await anyio.to_thread.run_sync(
