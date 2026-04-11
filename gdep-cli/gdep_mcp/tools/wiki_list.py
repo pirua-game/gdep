@@ -33,6 +33,11 @@ def run(project_path: str,
     """
     try:
         from gdep.wiki.store import WikiStore
+        from gdep.wiki.staleness import (
+            build_class_fingerprint_map,
+            get_project_fingerprint,
+            is_node_stale,
+        )
 
         store = WikiStore(project_path)
         nodes = store.list_nodes(node_type=node_type, limit=limit)
@@ -48,12 +53,41 @@ def run(project_path: str,
                 "  - `analyze_ue5_blueprint_mapping(path)` → creates asset nodes"
             )
 
+        # ── Live staleness 계산 ──────────────────────────────────
+        # class 노드가 있으면 단일 walk로 전체 fingerprint 맵 구성
+        has_class = any(n.type == "class" for n in nodes)
+
+        class_fp_map: dict[str, str] = (
+            build_class_fingerprint_map(project_path) if has_class else {}
+        )
+        # project_fp는 lazy: class 파일이 없는 경우(DLL 등)와 non-class 노드에 공통 사용
+        _project_fp: list[str] = []  # mutable box for lazy init
+
+        def _get_project_fp() -> str:
+            if not _project_fp:
+                _project_fp.append(get_project_fingerprint(project_path))
+            return _project_fp[0]
+
+        def _is_stale_live(n) -> bool:
+            if n.type == "class":
+                current = class_fp_map.get(n.title.lower())
+                if current is None:
+                    # 파일 없음(DLL/어셈블리) → project fingerprint로 fallback
+                    current = _get_project_fp()
+                return is_node_stale(n.source_fingerprint, current)
+            return is_node_stale(n.source_fingerprint, _get_project_fp())
+
         # 타입별로 그룹화
         by_type: dict[str, list] = {}
         for node in nodes:
             by_type.setdefault(node.type, []).append(node)
 
-        lines = [f"## Wiki Nodes ({len(nodes)} total)\n"]
+        stale_count = sum(1 for n in nodes if _is_stale_live(n))
+        header = f"## Wiki Nodes ({len(nodes)} total"
+        if stale_count:
+            header += f", ⚠ {stale_count} stale"
+        header += ")\n"
+        lines = [header]
 
         type_labels = {
             "class": "Classes",
@@ -73,7 +107,7 @@ def run(project_path: str,
             lines.append("| Node ID | Updated | Stale |")
             lines.append("|---------|---------|-------|")
             for n in sorted(type_nodes, key=lambda x: x.title):
-                stale = "⚠ Yes" if n.stale else "✓ No"
+                stale = "⚠ Yes" if _is_stale_live(n) else "✓ No"
                 lines.append(f"| `{n.id}` | {n.updated_at} | {stale} |")
             lines.append("")
 
@@ -81,6 +115,11 @@ def run(project_path: str,
             "> Use `wiki_get(project_path, node_id)` to read a node's full content.\n"
             "> Use `wiki_search(project_path, query)` to search by keyword."
         )
+        if stale_count:
+            lines.append(
+                f"\n> ⚠ **{stale_count} node(s) are stale** — source files have changed."
+                " Re-run `explore_class_semantics` (or the relevant analysis tool) to refresh."
+            )
 
         return "\n".join(lines)
 

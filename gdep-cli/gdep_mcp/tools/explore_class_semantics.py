@@ -65,8 +65,8 @@ def run(project_path: str, class_name: str,
         Full class structure (fields, methods, refs) with optional AI summary and source.
     """
     try:
-        # wiki-first: refresh=False이면 위키에서 먼저 확인
-        if not refresh and not include_source:
+        # include_source가 아니면 항상 wiki 레이어를 통과 (refresh=True여도 저장)
+        if not include_source:
             try:
                 from gdep.wiki.cache_layer import wiki_cached_class
                 from gdep.detector import detect as _detect
@@ -77,7 +77,8 @@ def run(project_path: str, class_name: str,
 
                 profile = _detect(project_path)
                 engine = profile.display if profile else ""
-                return wiki_cached_class(project_path, class_name, _analyze, engine)
+                return wiki_cached_class(project_path, class_name, _analyze, engine,
+                                         refresh=refresh)
             except Exception:
                 pass  # wiki 레이어 실패 시 기존 방식으로 fall-through
 

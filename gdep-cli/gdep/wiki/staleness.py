@@ -29,6 +29,43 @@ def is_node_stale(node_fingerprint: str, current_fingerprint: str) -> bool:
     return node_fingerprint != current_fingerprint
 
 
+def build_class_fingerprint_map(project_path: str) -> dict[str, str]:
+    """
+    src_path 아래 소스 파일을 한 번만 walk해서 {stem_lower: fingerprint} 맵 반환.
+    wiki_list에서 N개 노드를 O(1) 조회할 수 있도록 일괄 계산에 사용.
+    """
+    import hashlib
+    import os
+
+    try:
+        from gdep.detector import detect
+        from gdep.runner import _src
+
+        profile = detect(project_path)
+        src_path = _src(profile)
+        result: dict[str, str] = {}
+        extensions = {".cs", ".h", ".cpp"}
+
+        for root, _, files in os.walk(src_path):
+            for f in files:
+                ext = os.path.splitext(f)[1].lower()
+                if ext not in extensions:
+                    continue
+                stem = os.path.splitext(f)[0].lower()
+                fpath = os.path.join(root, f)
+                try:
+                    stat = os.stat(fpath)
+                    h = hashlib.md5(f"{fpath}:{stat.st_mtime_ns}".encode())
+                    # 같은 이름 파일이 여러 개면 마지막 것만 남음 (기존 get_class_fingerprint와 동일)
+                    result[stem] = h.hexdigest()
+                except Exception:
+                    pass
+
+        return result
+    except Exception:
+        return {}
+
+
 def get_class_fingerprint(project_path: str, class_name: str) -> str:
     """
     특정 클래스 파일의 fingerprint 계산.

@@ -35,7 +35,8 @@ def _wiki_dir(project_path: str) -> Path:
 
 def wiki_cached_class(project_path: str, class_name: str,
                       analyzer_fn: Callable[[], str],
-                      engine: str = "") -> str:
+                      engine: str = "",
+                      refresh: bool = False) -> str:
     """
     클래스 분석 결과를 위키에서 먼저 확인하고, stale이면 재분석 후 저장.
 
@@ -44,6 +45,7 @@ def wiki_cached_class(project_path: str, class_name: str,
         class_name:   클래스 이름
         analyzer_fn:  실제 분석 함수 (인자 없이 호출, str 반환)
         engine:       엔진 이름 (frontmatter용)
+        refresh:      True이면 위키 캐시를 무시하고 재분석 (결과는 위키에 다시 저장)
 
     Returns:
         분석 결과 문자열 (위키에서 읽거나 새로 생성)
@@ -54,7 +56,7 @@ def wiki_cached_class(project_path: str, class_name: str,
 
     current_fp = get_class_fingerprint(project_path, class_name)
 
-    if node and not node.stale and not is_node_stale(node.source_fingerprint, current_fp):
+    if not refresh and node and not node.stale and not is_node_stale(node.source_fingerprint, current_fp):
         # fresh → 위키 내용 반환
         cached = store.read_content(node)
         return cached + "\n\n> *[wiki] Returned from wiki cache. Run with refresh=True to force re-analysis.*"
