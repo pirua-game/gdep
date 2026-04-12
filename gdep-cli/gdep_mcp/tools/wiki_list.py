@@ -74,6 +74,9 @@ def run(project_path: str,
             return _project_fp[0]
 
         def _is_stale_live(n) -> bool:
+            if n.type == "conversation":
+                # conversation 노드는 소스 파일 연동 없음 → 항상 fresh
+                return False
             if n.type == "class":
                 current = class_fp_map.get(n.title.lower())
                 if current is None:
