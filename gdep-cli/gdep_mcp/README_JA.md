@@ -40,7 +40,7 @@ pip install gdep "mcp[cli]"
 
 ---
 
-## 🛠 ツール一覧（29個）
+## 🛠 ツール一覧（30個）
 
 ### コンテキストツール
 
@@ -48,7 +48,7 @@ pip install gdep "mcp[cli]"
 |--------|------|
 | `get_project_context` | **セッション開始時に最初に呼び出す** — プロジェクト全体概要 |
 
-### Wiki ツール — 新規分析前に使用（3個）
+### Wiki ツール — 新規分析前に使用（4個）
 
 `explore_class_semantics`、`analyze_ue5_gas` などの分析結果は `.gdep/wiki/` に自動保存され、SQLite + FTS5 でインデックス化されます。wiki はセッションをまたいで知識を蓄積します。
 
@@ -57,6 +57,7 @@ pip install gdep "mcp[cli]"
 | `wiki_search` | **新規分析前に必ず最初に呼び出す。** 分析済みクラス・アセット・システムを FTS5 BM25 で全文検索。CamelCase 対応 — `"GameplayAbility"` で `ULyraGameplayAbility` を検索可能。`related=True` で依存エッジを介して関連ノードに拡張。キャッシュヒット時は即時返答。 |
 | `wiki_list` | wiki 全ノード一覧 + staleness ステータス。最終分析以降にソースファイルが変更された場合 `⚠ stale (source changed since YYYY-MM-DD)` 表示。 |
 | `wiki_get` | 特定 wiki ノードの完全なキャッシュ分析内容を読む。ノード ID 形式: `class:ZombieCharacter`。 |
+| `wiki_save_conversation` | エージェント会話要約をwikiに保存 — セッションコンテキスト・決定・発見を次のセッションまで保持。参照クラスに `discussed_in` エッジを作成。 |
 
 **推奨ワークフロー:**
 ```

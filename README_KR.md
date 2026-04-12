@@ -60,7 +60,7 @@ npm install -g gdep-mcp
 }
 ```
 
-설정 끝. 이제 Claude · Cursor · Gemini가 대화마다 게임 엔진 특화 **29개** 도구를 사용할 수 있습니다.
+설정 끝. 이제 Claude · Cursor · Gemini가 대화마다 게임 엔진 특화 **30개** 도구를 사용할 수 있습니다.
 
 ### MCP가 바꾸는 것
 
@@ -69,7 +69,7 @@ npm install -g gdep-mcp
 gdep MCP:   직접 의존 2개 · 간접 200개 이상 UI 클래스 · 에셋: prefabs/UI/combat.prefab
 ```
 
-### 29개 MCP 도구 한눈에 보기
+### 30개 MCP 도구 한눈에 보기
 
 | 도구 | 언제 사용 |
 |------|----------|
@@ -77,6 +77,7 @@ gdep MCP:   직접 의존 2개 · 간접 200개 이상 UI 클래스 · 에셋: p
 | `wiki_search` | **분석 전 항상 먼저** — 이미 분석된 클래스·에셋을 키워드로 검색 (FTS5 BM25). 캐시 히트 시 즉시 반환 |
 | `wiki_list` | wiki 전체 노드 목록 + staleness 상태 — 무엇이 이미 분석되었는지 확인 |
 | `wiki_get` | 특정 wiki 노드의 전체 분석 내용 읽기 |
+| `wiki_save_conversation` | 에이전트 대화 요약을 wiki에 저장 — 세션 컨텍스트·결정·발견을 다음 세션까지 보존. 참조 클래스에 `discussed_in` 엣지 생성. |
 | `analyze_impact_and_risk` | 클래스·메서드 수정 전 안전성 확인 (`method_name=`으로 메서드 레벨 호출자 추적; `detail_level="summary"`로 빠른 요약) |
 | `explain_method_logic` | 단일 메서드 내부 제어 흐름 요약 (Guard/Branch/Loop/Always). C++ namespace 함수 지원. `include_source=True`로 메서드 본문 첨부 |
 | `trace_gameplay_flow` | C++ → Blueprint 호출 체인 추적 |

@@ -59,7 +59,7 @@ npm install -g gdep-mcp
 }
 ```
 
-設定完了。Claude · Cursor · Gemini が毎会話でゲームエンジン特化の **29 個** のツールを使えます。
+設定完了。Claude · Cursor · Gemini が毎会話でゲームエンジン特化の **30 個** のツールを使えます。
 
 ### MCP が変えること
 
@@ -68,7 +68,7 @@ npm install -g gdep-mcp
 gdep MCP:   直接依存 2 件 · 間接 200 件以上の UI クラス · アセット: prefabs/UI/combat.prefab
 ```
 
-### MCP ツール一覧（29 個）
+### MCP ツール一覧（30 個）
 
 | ツール | 使用タイミング |
 |--------|-------------|
@@ -76,6 +76,7 @@ gdep MCP:   直接依存 2 件 · 間接 200 件以上の UI クラス · アセ
 | `wiki_search` | **新規分析前に必ず最初に呼び出す** — 分析済みクラス・アセットをFTS5 BM25でキーワード検索。CamelCase対応。キャッシュヒット時は即時返答 |
 | `wiki_list` | wikiノード全一覧 + stalenessステータス確認 |
 | `wiki_get` | 特定wikiノードの完全な分析内容を読む |
+| `wiki_save_conversation` | エージェント会話要約をwikiに保存 — セッションコンテキスト・決定・発見を次のセッションまで保持。参照クラスに `discussed_in` エッジを作成。 |
 | `analyze_impact_and_risk` | クラス・メソッド変更前の安全確認（`method_name=` でメソッドレベル呼び出し元追跡; `detail_level="summary"` で高速要約） |
 | `explain_method_logic` | 単一メソッドの内部制御フロー要約 — Guard/Branch/Loop/Always。C++ namespace 関数対応。`include_source=True` でメソッド本文を追加 |
 | `trace_gameplay_flow` | C++ → Blueprint 呼び出しチェーン追跡 |

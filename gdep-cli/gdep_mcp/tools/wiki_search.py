@@ -16,12 +16,13 @@ if str(_GDEP_ROOT) not in sys.path:
 def run(project_path: str, query: str,
         node_type: str | list[str] | None = None,
         related: bool = False,
-        limit: int = 20) -> str:
+        limit: int = 20,
+        mode: str = "or") -> str:
     """
     Search the project wiki for previously analyzed classes, assets, and systems.
 
     Uses FTS5 full-text search (BM25 ranking) when available — finds nodes
-    even when you don't know the exact class name. Multi-word queries use OR logic.
+    even when you don't know the exact class name.
 
     The wiki accumulates analysis results across sessions. Use this tool FIRST
     to check if a class or asset has already been analyzed before calling
@@ -29,7 +30,7 @@ def run(project_path: str, query: str,
 
     Args:
         project_path: Absolute path to the project Scripts/Source directory.
-        query:        Search keyword or phrase. Multi-word searches are OR'd.
+        query:        Search keyword or phrase.
                       Examples: "damage", "PlayerCharacter", "GAS ability", "좀비 AI"
         node_type:    Optional filter. Single string or list:
                         'class', 'asset', 'system', 'pattern', 'conversation'
@@ -37,8 +38,15 @@ def run(project_path: str, query: str,
                       None = search all types.
         related:      If True, also returns nodes connected via dependency edges
                       (depends_on, referenced_by, inherits, uses_asset).
-                      Useful for finding related classes without knowing their names.
+                      Nodes not yet in wiki appear as stubs with "(not yet analyzed)"
+                      — giving hints about relationships that exist but haven't been explored.
         limit:        Maximum number of results to return (default 20).
+        mode:         Query matching mode (default 'or'):
+                        'or'     — any word matches (broad, good for exploration)
+                        'and'    — all words must match (narrow, precise)
+                        'phrase' — exact phrase in order (strictest)
+                      Example: "GAS ability zombie" with mode='and' returns only nodes
+                      containing all three terms, not just nodes with "ability" alone.
 
     Returns:
         List of matching wiki nodes with BM25 scores and content snippets.
@@ -47,7 +55,8 @@ def run(project_path: str, query: str,
         from gdep.wiki.store import WikiStore
 
         store = WikiStore(project_path)
-        matches = store.search(query, node_type=node_type, related=related, limit=limit)
+        matches = store.search(query, node_type=node_type, related=related,
+                               limit=limit, mode=mode)
 
         if not matches:
             type_note = ""
@@ -68,8 +77,9 @@ def run(project_path: str, query: str,
         elif node_type:
             type_label = f" [type: {node_type}]"
         related_label = " +related" if related else ""
+        mode_label = f" mode={mode}" if mode != "or" else ""
         lines = [
-            f"## Wiki Search: '{query}'{type_label}{related_label}",
+            f"## Wiki Search: '{query}'{type_label}{related_label}{mode_label}",
             f"Found {len(matches)} result(s)\n",
         ]
 
@@ -77,12 +87,30 @@ def run(project_path: str, query: str,
         for node, snippet, score in matches:
             stale_mark = " *(stale)*" if node.stale else ""
             is_related = snippet.startswith("[related via")
+            is_stub = not node.file_path  # file_path가 빈 문자열 → 미분석 stub
 
-            # BM25 스코어 표시 (FTS5 모드, 관련 노드 제외)
+            if is_stub:
+                # 미분석 관계 노드: wiki에 없지만 엣지가 존재함을 에이전트에 알림
+                lines.append(f"### [{node.type}] {node.title} *(not yet analyzed)*")
+                lines.append(f"- **ID**: `{node.id}`")
+                lines.append(f"- **Link**: {snippet}")
+                lines.append(
+                    f"\n> Not yet analyzed. "
+                    f"Run `explore_class_semantics(project_path, \"{node.title}\")` "
+                    f"(or the appropriate analysis tool) to populate this wiki node."
+                )
+                lines.append("")
+                continue
+
+            # 스코어 표시: FTS5 BM25는 수치, LIKE fallback(-1.0)은 레이블
             score_str = ""
-            if fts_mode and not is_related and score != 0.0:
-                # bm25는 음수 → 절댓값이 클수록 관련성 높음
-                score_str = f" *(relevance: {abs(score):.2f})*"
+            if not is_related and score != 0.0:
+                if score == -1.0:
+                    # LIKE fallback 센티널 — 수치 표시 시 혼란 방지
+                    score_str = " *(partial match)*"
+                elif fts_mode:
+                    # BM25 음수 → 절댓값이 클수록 관련성 높음
+                    score_str = f" *(relevance: {abs(score):.2f})*"
 
             lines.append(f"### [{node.type}] {node.title}{stale_mark}{score_str}")
             lines.append(f"- **ID**: `{node.id}`")

@@ -104,6 +104,35 @@ def make_pattern_page(pattern_name: str, analysis_content: str,
     return frontmatter + body
 
 
+def make_conversation_page(title: str, content: str,
+                           fingerprint: str,
+                           tags: list[str] | None = None,
+                           tools_used: list[str] | None = None) -> str:
+    """에이전트 대화 요약을 대화 위키 페이지로 변환."""
+    today = date.today().strftime("%Y-%m-%d")
+    tags_line = f"tags: [{', '.join(tags)}]\n" if tags else ""
+    tools_line = f"tools_used: [{', '.join(tools_used)}]\n" if tools_used else ""
+    frontmatter = (
+        f"---\n"
+        f"title: \"{title}\"\n"
+        f"type: conversation\n"
+        f"session_date: {today}\n"
+        f"{tags_line}"
+        f"{tools_line}"
+        f"created: {today}\n"
+        f"updated: {today}\n"
+        f"source_fingerprint: {fingerprint}\n"
+        f"stale: false\n"
+        f"---\n\n"
+    )
+    body = (
+        f"# {title}\n\n"
+        f"> Saved by agent via `wiki_save_conversation`.\n\n"
+        f"{content}\n"
+    )
+    return frontmatter + body
+
+
 def update_frontmatter_stale(content: str, stale: bool) -> str:
     """기존 마크다운 페이지의 frontmatter에서 stale 값을 업데이트."""
     stale_str = "true" if stale else "false"

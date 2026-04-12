@@ -59,6 +59,7 @@ from gdep_mcp.tools.detect_patterns import run as _detect_patterns_run
 from gdep_mcp.tools.wiki_search import run as _wiki_search_run
 from gdep_mcp.tools.wiki_list import run as _wiki_list_run
 from gdep_mcp.tools.wiki_get import run as _wiki_get_run
+from gdep_mcp.tools.wiki_save_conversation import run as _wiki_save_conv_run
 
 # ── 추가 분석 모듈 (3~7단계 기능) — 로드 실패해도 서버는 기동됨 ──
 try:
@@ -1071,13 +1072,14 @@ async def read_class_source(project_path: str, class_name: str,
 @mcp.tool()
 async def wiki_search(project_path: str, query: str,
                       node_type: str | list[str] | None = None,
-                      related: bool = False,
-                      limit: int = 20) -> str:
+                      related: bool | str = False,
+                      limit: int = 20,
+                      mode: str = "or") -> str:
     """
     Search the project wiki for previously analyzed classes, assets, and systems.
 
     Uses FTS5 full-text search with BM25 ranking — finds nodes even when you
-    don't know the exact class name. Multi-word queries are OR'd automatically.
+    don't know the exact class name.
 
     USE THIS TOOL FIRST before running fresh analysis tools.
     The wiki accumulates analysis results across sessions — if a class or asset
@@ -1088,23 +1090,35 @@ async def wiki_search(project_path: str, query: str,
     - You want to find all analyzed entities related to a concept (e.g. "damage", "ability", "zombie AI")
     - You want to see what the team has already explored in previous sessions
     - You want to find classes related to a known class (use related=True)
+    - You need to narrow down broad results with mode='and'
 
     Returns matching wiki nodes with BM25 relevance scores and content snippets.
 
     Args:
         project_path: Absolute path to the project Scripts/Source directory.
-        query:        Search keyword or phrase. Multi-word is OR'd.
+        query:        Search keyword or phrase.
                       Examples: "damage", "PlayerCharacter", "GAS ability", "zombie AI"
         node_type:    Optional filter. String or list of strings:
                         'class', 'asset', 'system', 'pattern', 'conversation'
                       Example: ['class', 'asset'] — search both types.
                       None = search all types.
-        related:      If True, also includes nodes connected via dependency edges.
-                      Useful for finding related classes without knowing their names.
+        related:      If True, also includes nodes connected via dependency edges
+                      (depends_on, referenced_by, inherits, uses_asset).
+                      Nodes not yet in wiki appear as stubs with "(not yet analyzed)"
+                      to hint at unexplored relationships.
         limit:        Maximum results to return (default 20).
+        mode:         Query matching mode (default 'or'):
+                        'or'     — any word matches (broad, good for exploration)
+                        'and'    — all words must match (precise, avoids noise)
+                        'phrase' — exact phrase in sequence (strictest)
+                      Use 'and' when OR returns too many unrelated results.
+                      Use 'phrase' for exact method names or class names with spaces.
     """
+    # MCP 클라이언트가 "true"/"false" 문자열로 전송하는 경우 대비
+    if isinstance(related, str):
+        related = related.lower() in ("true", "1", "yes")
     return await anyio.to_thread.run_sync(
-        lambda: _wiki_search_run(project_path, query, node_type, related, limit)
+        lambda: _wiki_search_run(project_path, query, node_type, related, limit, mode)
     )
 
 
@@ -1157,6 +1171,62 @@ async def wiki_get(project_path: str, node_id: str) -> str:
     """
     return await anyio.to_thread.run_sync(
         lambda: _wiki_get_run(project_path, node_id)
+    )
+
+
+@mcp.tool()
+async def wiki_save_conversation(
+    project_path: str,
+    title: str,
+    content: str,
+    referenced_classes: list[str] | None = None,
+    tags: list[str] | None = None,
+    tools_used: list[str] | None = None,
+) -> str:
+    """
+    Save an agent conversation summary to the project wiki.
+
+    Call this at the end of a session (or at any meaningful checkpoint)
+    to persist what was discussed, decided, and discovered.
+    Conversations are the most valuable asset of agent sessions — they capture
+    context, decisions, and discoveries that raw code analysis cannot.
+
+    USE THIS TOOL WHEN:
+    - Session ends and meaningful analysis/decisions were made
+    - You want to record architectural decisions for future sessions
+    - You explored multiple classes and want to save the context map
+    - The user explicitly asks to save the conversation
+    - You want future sessions to know what was already investigated
+
+    The saved node is:
+    - Searchable via wiki_search (FTS5 full-text, filter node_type='conversation')
+    - Browsable via wiki_list (appears under 'Conversations' section)
+    - Linked to classes via 'discussed_in' edges (discoverable with related=True)
+    - Re-saveable: calling again with same title updates the node (upsert)
+
+    Args:
+        project_path:       Absolute path to the project Scripts/Source directory.
+        title:              Session title — brief and descriptive.
+                            Example: "Zombie AI GAS ability analysis"
+        content:            Conversation summary in markdown. Recommended structure:
+                            ## Summary — 1-3 bullet overview
+                            ## Key Findings — discoveries, dependencies, issues
+                            ## Decisions — architectural choices + rationale
+                            ## Open Questions — unresolved items
+                            ## Next Steps — what to investigate next
+        referenced_classes: Optional list of class names discussed in this session.
+                            Creates 'discussed_in' edges for graph traversal.
+                            Example: ["ULyraAbilitySystemComponent", "ZombieCharacter"]
+        tags:               Optional keyword tags for search.
+                            Example: ["gas", "ability", "zombie-ai"]
+        tools_used:         Optional list of gdep tools used during this session.
+                            Example: ["explore_class_semantics", "analyze_ue5_gas"]
+    """
+    return await anyio.to_thread.run_sync(
+        lambda: _wiki_save_conv_run(
+            project_path, title, content,
+            referenced_classes, tags, tools_used,
+        )
     )
 
 

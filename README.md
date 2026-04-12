@@ -61,7 +61,7 @@ npm install -g gdep-mcp
 }
 ```
 
-That's it. Your AI now has **29** game-engine-aware tools available on every conversation.
+That's it. Your AI now has **30** game-engine-aware tools available on every conversation.
 
 ### What changes with MCP
 
@@ -70,7 +70,7 @@ Without gdep:  "CombatCore probably has some Manager dependencies..." ← halluc
 With gdep:     Direct deps: 2 · Indirect: 200+ UI classes · Asset: prefabs/UI/combat.prefab
 ```
 
-### 29 MCP Tools at a glance
+### 30 MCP Tools at a glance
 
 | Tool | When to use |
 |------|-------------|
@@ -78,6 +78,7 @@ With gdep:     Direct deps: 2 · Indirect: 200+ UI classes · Asset: prefabs/UI/
 | `wiki_search` | **Call before any analysis** — search previously analyzed classes/assets by keyword (FTS5 BM25). Instant if cached |
 | `wiki_list` | List all wiki nodes with staleness status — see what has already been analyzed |
 | `wiki_get` | Read full content of a specific wiki node |
+| `wiki_save_conversation` | Save agent conversation summary to wiki — persists session context, decisions, and findings across sessions. Creates `discussed_in` edges to referenced classes |
 | `analyze_impact_and_risk` | Before modifying any class or method (`method_name=` for method-level callers; `detail_level="summary"` for quick count) |
 | `explain_method_logic` | Internal control flow of a single method — Guard/Branch/Loop/Always. Supports C++ namespace-style functions. `include_source=True` appends method body |
 | `trace_gameplay_flow` | Trace C++ → Blueprint call chains (`summary=True` for compact output) |

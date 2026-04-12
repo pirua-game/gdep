@@ -54,7 +54,7 @@ pip install gdep "mcp[cli]"
 
 ---
 
-## 🛠 工具列表（29个）
+## 🛠 工具列表（30个）
 
 ### 上下文工具
 
@@ -62,7 +62,7 @@ pip install gdep "mcp[cli]"
 |------|------|
 | `get_project_context` | **会话开始时首先调用** — 项目整体概览 |
 
-### Wiki 工具 — 新分析前先使用（3个）
+### Wiki 工具 — 新分析前先使用（4个）
 
 `explore_class_semantics`、`analyze_ue5_gas` 等分析结果会自动保存到 `.gdep/wiki/`，并通过 SQLite + FTS5 建立索引。wiki 跨会话积累知识。
 
@@ -71,6 +71,7 @@ pip install gdep "mcp[cli]"
 | `wiki_search` | **新分析前始终最先调用。** FTS5 BM25 全文搜索已分析的类、资源和系统。CamelCase 感知 — `"GameplayAbility"` 可找到 `ULyraGameplayAbility`。`related=True` 通过依赖边展开关联节点。缓存命中时即时返回。 |
 | `wiki_list` | 全部 wiki 节点列表 + staleness 状态。源文件在最后分析之后发生变更时显示 `⚠ stale (source changed since YYYY-MM-DD)`。 |
 | `wiki_get` | 读取特定 wiki 节点的完整缓存分析内容。节点 ID 格式：`class:ZombieCharacter`。 |
+| `wiki_save_conversation` | 将 Agent 会话摘要保存到 wiki — 跨会话保留上下文、决策和发现。为引用的类创建 `discussed_in` 边。 |
 
 **推荐工作流程：**
 ```

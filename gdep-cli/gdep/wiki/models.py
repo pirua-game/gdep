@@ -11,6 +11,7 @@ EDGE_DEPENDS_ON    = "depends_on"
 EDGE_REFERENCED_BY = "referenced_by"
 EDGE_INHERITS      = "inherits"
 EDGE_USES_ASSET    = "uses_asset"
+EDGE_DISCUSSED_IN  = "discussed_in"   # 대화에서 특정 클래스/에셋을 논의함
 
 
 @dataclass

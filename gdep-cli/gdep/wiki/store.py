@@ -139,6 +139,22 @@ class WikiStore:
             except Exception:
                 pass
 
+        # FTS 본문 CamelCase 분리 포맷 버전 확인 (fts_body_version=3 미적용 시 자동 rebuild)
+        # v2: _split_camel_in_text 도입 / v3: _parse_node_from_md created/updated 키 호환 수정
+        if self._fts_available:
+            try:
+                fts_ver = conn.execute(
+                    "SELECT value FROM wiki_config WHERE key='fts_body_version'"
+                ).fetchone()
+                if fts_ver is None or fts_ver[0] != "3":
+                    self.rebuild_from_files()
+                    conn.execute(
+                        "INSERT OR REPLACE INTO wiki_config VALUES ('fts_body_version', '3')"
+                    )
+                    conn.commit()
+            except Exception:
+                pass
+
     def _migrate_from_json(self, meta_path: Path) -> None:
         """기존 .wiki_meta.json → SQLite 마이그레이션."""
         try:
@@ -179,7 +195,7 @@ class WikiStore:
                     except Exception:
                         body = node.title
                     conn.execute("DELETE FROM wiki_fts WHERE node_id=?", (node.id,))
-                    fts_content = _split_camel(node.title) + "\n" + body
+                    fts_content = _split_camel(node.title) + "\n" + _split_camel_in_text(body)
                     conn.execute(
                         "INSERT INTO wiki_fts(title, content, node_type, node_id) "
                         "VALUES (?,?,?,?)",
@@ -225,7 +241,7 @@ class WikiStore:
                 )
                 if self._fts_available:
                     body = _strip_frontmatter(content)
-                    fts_content = _split_camel(node.title) + "\n" + body
+                    fts_content = _split_camel(node.title) + "\n" + _split_camel_in_text(body)
                     conn.execute("DELETE FROM wiki_fts WHERE node_id=?", (node.id,))
                     conn.execute(
                         "INSERT INTO wiki_fts(title, content, node_type, node_id) "
@@ -278,7 +294,7 @@ class WikiStore:
         # 3. FTS 갱신 (frontmatter 제거한 본문 + CamelCase 분리 제목)
         if self._fts_available:
             body = _strip_frontmatter(content)
-            fts_content = _split_camel(node.title) + "\n" + body
+            fts_content = _split_camel(node.title) + "\n" + _split_camel_in_text(body)
             conn.execute("DELETE FROM wiki_fts WHERE node_id=?", (node.id,))
             conn.execute(
                 "INSERT INTO wiki_fts(title, content, node_type, node_id) "
@@ -328,35 +344,43 @@ class WikiStore:
     def search(self, query: str,
                node_type: str | list[str] | None = None,
                related: bool = False,
-               limit: int = 20) -> list[tuple[WikiNode, str, float]]:
+               limit: int = 20,
+               mode: str = "or") -> list[tuple[WikiNode, str, float]]:
         """
         위키 노드 검색.
 
         Args:
-            query:     검색 키워드 (멀티워드 OR 검색)
+            query:     검색 키워드 (멀티워드 검색)
             node_type: 'class', ['class','asset'] 등 타입 필터
             related:   True이면 엣지 기반으로 관련 노드도 포함
             limit:     최대 결과 수
+            mode:      'or' (기본) | 'and' | 'phrase'
+                       or    — 단어 중 하나라도 포함
+                       and   — 모든 단어 포함
+                       phrase — 정확한 구문 순서 매칭
 
         Returns:
             [(node, snippet, bm25_score), ...]
             score가 낮을수록 관련성 높음 (BM25 부호 반전됨)
         """
+        if mode not in ("or", "and", "phrase"):
+            mode = "or"
         if self._fts_available:
-            results = self._search_fts(query, node_type, related, limit)
+            results = self._search_fts(query, node_type, related, limit, mode)
             if results:
                 return results
             # FTS5가 CamelCase 합성어를 단일 토큰으로 처리해 0 결과일 수 있음
             # → LIKE 기반 부분 매칭으로 폴백
-        return self._search_like(query, node_type, limit)
+        return self._search_like(query, node_type, limit, mode)
 
     def _search_fts(self, query: str,
                     node_type: str | list[str] | None,
                     related: bool,
-                    limit: int) -> list[tuple[WikiNode, str, float]]:
+                    limit: int,
+                    mode: str = "or") -> list[tuple[WikiNode, str, float]]:
         """FTS5 BM25 기반 검색."""
         conn = self._get_conn()
-        escaped = _escape_fts(query)
+        escaped = _escape_fts(query, mode)
 
         params: list = [escaped]
         type_clause = ""
@@ -382,7 +406,7 @@ class WikiStore:
             rows = conn.execute(sql, params).fetchall()
         except sqlite3.OperationalError:
             # FTS 쿼리 오류 → LIKE 폴백
-            return self._search_like(query, node_type, limit)
+            return self._search_like(query, node_type, limit, mode)
 
         results: list[tuple[WikiNode, str, float]] = []
         seen_ids: set[str] = set()
@@ -408,34 +432,61 @@ class WikiStore:
 
     def _search_like(self, query: str,
                      node_type: str | list[str] | None,
-                     limit: int) -> list[tuple[WikiNode, str, float]]:
+                     limit: int,
+                     mode: str = "or") -> list[tuple[WikiNode, str, float]]:
         """LIKE 기반 부분 매칭 검색 (FTS 미지원 또는 FTS 0결과 폴백).
-        멀티워드 쿼리는 단어 단위 OR 매칭."""
+        mode: 'or' — 단어 중 하나, 'and' — 모든 단어, 'phrase' — 구문 매칭."""
         results: list[tuple[WikiNode, str, float]] = []
         words = [w.lower() for w in query.split() if w]
         if not words:
             words = [query.lower()]
+        phrase = " ".join(words)  # phrase 모드용
 
         for node in self.list_nodes(node_type=node_type, limit=1000):
             title_lower = node.title.lower()
             # CamelCase 분리 버전도 함께 검사
             split_title = _split_camel(node.title).lower()
-            if any(w in title_lower or w in split_title for w in words):
+
+            if mode == "phrase":
+                title_match = phrase in title_lower or phrase in split_title
+            elif mode == "and":
+                title_match = all(w in title_lower or w in split_title for w in words)
+            else:  # "or"
+                title_match = any(w in title_lower or w in split_title for w in words)
+
+            if title_match:
                 results.append((node, f"Title match: {node.title}", -1.0))
                 if len(results) >= limit:
                     break
                 continue
+
             md_path = self._wiki_dir / node.file_path
             try:
-                content = md_path.read_text(encoding="utf-8").lower()
-                for w in words:
-                    idx = content.find(w)
+                # frontmatter 제거 후 본문만 검색 (type/source_fingerprint 등 키 오탐 방지)
+                content = _strip_frontmatter(md_path.read_text(encoding="utf-8")).lower()
+                if mode == "phrase":
+                    idx = content.find(phrase)
                     if idx >= 0:
                         start = max(0, idx - 60)
-                        end = min(len(content), idx + len(w) + 60)
+                        end = min(len(content), idx + len(phrase) + 60)
                         snip = "..." + content[start:end].replace("\n", " ") + "..."
                         results.append((node, snip, -1.0))
-                        break
+                elif mode == "and":
+                    if all(w in content for w in words):
+                        idx = content.find(words[0])
+                        start = max(0, idx - 60)
+                        end = min(len(content), idx + len(words[0]) + 60)
+                        snip = "..." + content[start:end].replace("\n", " ") + "..."
+                        results.append((node, snip, -1.0))
+                else:  # "or"
+                    for w in words:
+                        idx = content.find(w)
+                        if idx >= 0:
+                            start = max(0, idx - 60)
+                            end = min(len(content), idx + len(w) + 60)
+                            snip = "..." + content[start:end].replace("\n", " ") + "..."
+                            results.append((node, snip, -1.0))
+                            break
             except Exception:
                 pass
             if len(results) >= limit:
@@ -445,7 +496,8 @@ class WikiStore:
 
     def _expand_related(self, primary_ids: list[str],
                         seen_ids: set[str]) -> list[tuple[WikiNode, str]]:
-        """엣지 테이블에서 1홉 관련 노드 확장."""
+        """엣지 테이블에서 1홉 관련 노드 확장.
+        wiki에 없는 타겟은 stub 노드로 반환 — 에이전트가 미분석 관계를 인지할 수 있도록."""
         if not primary_ids:
             return []
         conn = self._get_conn()
@@ -462,6 +514,21 @@ class WikiStore:
                 node = self.get(target_id)
                 if node:
                     expanded.append((node, relation))
+                else:
+                    # 엣지 타겟이 wiki에 없을 때 stub으로 힌트 제공
+                    parts = target_id.split(":", 1)
+                    stub_type = parts[0] if len(parts) == 2 else "class"
+                    stub_title = parts[1] if len(parts) == 2 else target_id
+                    stub = WikiNode(
+                        id=target_id,
+                        type=stub_type,
+                        title=stub_title,
+                        file_path="",  # sentinel: 미분석 노드
+                        source_fingerprint="",
+                        created_at="",
+                        updated_at="",
+                    )
+                    expanded.append((stub, f"{relation} (not yet analyzed)"))
         return expanded
 
     # ── Edges ──────────────────────────────────────────────────
@@ -581,13 +648,44 @@ def _split_camel(name: str) -> str:
     return s
 
 
-def _escape_fts(query: str) -> str:
-    """FTS5 쿼리 이스케이프. CamelCase 분리 후 OR 토큰으로 분리.
-    * 보존: 쿼리 접미사 * → FTS5 prefix 연산자로 변환 (따옴표 밖에 위치)
-    예: 'GAS ability zombie'     → '"GAS" OR "ability" OR "zombie"'
-    예: 'GameplayAbility'        → '"Gameplay" OR "Ability"'  (인덱스와 대칭)
-    예: 'Lyra*'                  → '"Lyra"*'
+_RE_CAMELCASE = re.compile(r'\b([A-Z]+[a-z]+(?:[A-Z][a-z]*)+)\b')
+
+
+def _split_camel_in_text(text: str) -> str:
+    """본문 내 CamelCase 식별자를 원본 + 분리형으로 보강.
+
+    예: "Uses AbilitySystemComponent" → "Uses AbilitySystemComponent Ability System Component"
+    FTS5가 합성어(AbilitySystemComponent)와 분리 단어(ability, system, component) 모두 매칭 가능.
+    단일 대문자어(GAS, AI, BP)나 단일 단어(Component)는 변환하지 않음.
     """
+    def _augment(m: re.Match) -> str:
+        original = m.group(0)
+        split = _split_camel(original)
+        if split == original:
+            return original
+        return original + " " + split
+
+    return _RE_CAMELCASE.sub(_augment, text)
+
+
+def _escape_fts(query: str, mode: str = "or") -> str:
+    """FTS5 쿼리 이스케이프.
+    mode='or'    — CamelCase 분리 후 OR 토큰 결합 (기본)
+    mode='and'   — CamelCase 분리 후 AND 토큰 결합
+    mode='phrase'— CamelCase 분리 없이 원문 구문 매칭
+
+    예 (or):    'GAS ability zombie'    → '"GAS" OR "ability" OR "zombie"'
+    예 (and):   'GAS ability zombie'    → '"GAS" AND "ability" AND "zombie"'
+    예 (phrase):'GAS ability zombie'    → '"GAS ability zombie"'
+    예 (or):    'GameplayAbility'       → '"Gameplay" OR "Ability"'
+    예 (or):    'Lyra*'                 → '"Lyra"*'
+    """
+    if mode == "phrase":
+        # phrase: CamelCase 분리 없이 원문 그대로 구문 매칭
+        raw_words = re.sub(r"[^\w\s]", "", query).split()
+        return '"' + " ".join(raw_words) + '"' if raw_words else f'"{query}"'
+
+    # or / and: CamelCase 분리 + 토큰화
     # * 는 prefix 연산자이므로 보존, 그 외 특수문자 제거
     words = re.sub(r"[^\w\s*]", "", query).split()
     if not words:
@@ -605,7 +703,8 @@ def _escape_fts(query: str) -> str:
             token = f'"{part}"' + ("*" if prefix else "")
             expanded.append(token)
 
-    return " OR ".join(expanded) if expanded else f'"{query}"'
+    joiner = " AND " if mode == "and" else " OR "
+    return joiner.join(expanded) if expanded else f'"{query}"'
 
 
 def _parse_node_from_md(content: str, md_path: Path,
@@ -637,8 +736,8 @@ def _parse_node_from_md(content: str, md_path: Path,
             title=title,
             file_path=rel_path,
             source_fingerprint=_get("source_fingerprint", ""),
-            created_at=_get("created_at", ""),
-            updated_at=_get("updated_at", ""),
+            created_at=_get("created_at") or _get("created", ""),
+            updated_at=_get("updated_at") or _get("updated", ""),
             stale=_get("stale", "false").lower() == "true",
             meta={},
         )

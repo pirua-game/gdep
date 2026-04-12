@@ -60,7 +60,7 @@ npm install -g gdep-mcp
 }
 ```
 
-配置完成。Claude · Cursor · Gemini 每次对话都可使用 **29 个**游戏引擎专属工具。
+配置完成。Claude · Cursor · Gemini 每次对话都可使用 **30 个**游戏引擎专属工具。
 
 ### MCP 改变什么
 
@@ -69,7 +69,7 @@ npm install -g gdep-mcp
 gdep MCP:   直接依赖 2 个 · 间接 200+ UI 类 · 资源: prefabs/UI/combat.prefab
 ```
 
-### 29 个 MCP 工具一览
+### 30 个 MCP 工具一览
 
 | 工具 | 使用时机 |
 |------|---------|
@@ -77,6 +77,7 @@ gdep MCP:   直接依赖 2 个 · 间接 200+ UI 类 · 资源: prefabs/UI/comba
 | `wiki_search` | **新分析前始终最先调用** — FTS5 BM25 关键字搜索已分析的类和资源。CamelCase 感知。缓存命中时即时返回 |
 | `wiki_list` | 全部 wiki 节点列表 + staleness 状态确认 |
 | `wiki_get` | 读取特定 wiki 节点的完整分析内容 |
+| `wiki_save_conversation` | 将 Agent 会话摘要保存到 wiki — 跨会话保留上下文、决策和发现。为引用的类创建 `discussed_in` 边。 |
 | `analyze_impact_and_risk` | 修改类或方法前的安全确认（`method_name=` 追踪方法级调用方；`detail_level="summary"` 快速摘要） |
 | `explain_method_logic` | 单个方法内部控制流摘要 — Guard/Branch/Loop/Always。支持 C++ namespace 函数。`include_source=True` 附加方法体源码 |
 | `trace_gameplay_flow` | C++ → Blueprint 调用链追踪 |
